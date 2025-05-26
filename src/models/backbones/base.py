@@ -1,4 +1,5 @@
 import torch
+from torch.nn import Sequential
 
 
 class BackboneModel:
@@ -6,7 +7,7 @@ class BackboneModel:
         self.backbone = None
         self.model_name = model_name
 
-    def get_extractor(self):
+    def get_extractor(self) -> Sequential:
         if self.backbone is None:
             raise ValueError("Backbone model is not initialized")
         return torch.nn.Sequential(*list(self.backbone.children())[:-1])

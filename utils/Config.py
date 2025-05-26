@@ -56,7 +56,7 @@ class SpectralConfig(BaseConfig):
     """Spectral clustering related settings"""
 
     n_nbg: int = 10
-    min_lr: float = 1e-6
+    min_lr: float = 1e-8
     scale_k: int = 10
     lr_decay: float = 0.1
     patience: int = 10
@@ -68,11 +68,7 @@ class SpectralConfig(BaseConfig):
 class SelfAdjustGraphConfig(BaseConfig):
     """SelfAdjustGraph specific settings"""
 
-    hid_unit: int = 256
-    feat_size: int = 512
-    out_feat: int = 128
     g_dim: int = 64
-    k: int = 10
     gamma: float = 0.1
     mu: float = 0.1
     delta: float = 0.1
@@ -86,8 +82,27 @@ class SCHOOLConfig(BaseConfig):
 
     node_size: int = 512
     gcn_hid_units: int = 256
-    hid_units: int = 128
+    gcn_out_size: int = 128
     n_neighbors: int = 10
+    feat_size: int = 512
+    out_feat: int = 128
+    k: int = 10
+    spectral_architecture: List[int] = field(default_factory=lambda: [512, 256, 128])
+
+
+@dataclass
+class SiameseConfig(BaseConfig):
+    """Siamese network related settings"""
+
+    lr: float = 1e-3
+    n_nbg: int = 2
+    min_lr: float = 1e-7
+    epochs: int = 100
+    lr_decay: float = 0.1
+    patience: int = 10
+    architecture: List[int] = field(default_factory=lambda: [1024, 1024, 512])
+    batch_size: int = 128
+    use_approx: bool = False
 
 
 @dataclass
@@ -104,6 +119,7 @@ class Config(BaseConfig):
         default_factory=SelfAdjustGraphConfig
     )
     school: SCHOOLConfig = field(default_factory=SCHOOLConfig)
+    siamese: SiameseConfig = field(default_factory=SiameseConfig)
 
     # Device settings
     device: torch.device = field(
@@ -136,5 +152,6 @@ class Config(BaseConfig):
             "spectral": SpectralConfig,
             "self_adjust_graph": SelfAdjustGraphConfig,
             "school": SCHOOLConfig,
+            "siamese": SiameseConfig,
         }
         return config_classes.get(name)

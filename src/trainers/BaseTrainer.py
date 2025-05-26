@@ -4,11 +4,32 @@ from typing import Any, Dict, Optional, Union
 
 import pandas as pd
 import torch
-from torch.utils.data import DataLoader, TensorDataset, random_split
+from torch.utils.data import DataLoader, Dataset, TensorDataset, random_split
 
 from data.LoadData import load_dataset
 from utils.Config import Config
 from utils.logger import Logger
+
+
+class PaddedDataset(Dataset):
+    def __init__(self, dataset, batch_size):
+        self.dataset = dataset
+        self.batch_size = batch_size
+        self.original_length = len(dataset)
+        # Calculate how many samples we need to add to make the last batch full
+        self.padded_length = (
+            (self.original_length + self.batch_size - 1) // self.batch_size
+        ) * self.batch_size
+
+    def __len__(self):
+        return self.padded_length
+
+    def __getitem__(self, idx):
+        if idx < self.original_length:
+            return self.dataset[idx]
+        else:
+            # For indices beyond the original length, wrap around to the beginning
+            return self.dataset[idx % self.original_length]
 
 
 class BaseTrainer(object):
@@ -37,10 +58,25 @@ class BaseTrainer(object):
         else:
             trainset, valset = load_dataset(self.dataset_name)
             is_feature = False
-        train_loader = DataLoader(trainset, batch_size=self.batch_size, shuffle=True)
-        val_loader = DataLoader(valset, batch_size=self.batch_size, shuffle=False)
-        return train_loader, val_loader, is_feature
+
+        padded_train_dataset = PaddedDataset(trainset, self.batch_size)
+        padded_valid_dataset = PaddedDataset(valset, self.batch_size)
+
+        train_loader = DataLoader(
+            padded_train_dataset, batch_size=self.batch_size, shuffle=True
+        )
+        ortho_loader = DataLoader(
+            padded_train_dataset, batch_size=self.batch_size, shuffle=True
+        )
+        valid_loader = DataLoader(
+            padded_valid_dataset, batch_size=self.batch_size, shuffle=False
+        )
+        return train_loader, ortho_loader, valid_loader, is_feature
+        # train_loader = DataLoader(trainset, batch_size=self.batch_size, shuffle=True)
+        # val_loader = DataLoader(valset, batch_size=self.batch_size, shuffle=False)
+        # return train_loader, val_loader, is_feature
 
     @abstractmethod
     def train(self):
+        raise NotImplementedError("Trainer must implement the train method")
         raise NotImplementedError("Trainer must implement the train method")

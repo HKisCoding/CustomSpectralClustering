@@ -1,11 +1,11 @@
-import os
-import logging
 import json
+import logging
+import os
+
+import matplotlib.pyplot as plt
 import numpy as np
 import torch
-import matplotlib.pyplot as plt
 from annoy import AnnoyIndex
-
 from sklearn.neighbors import NearestNeighbors
 
 
@@ -277,3 +277,23 @@ def affinity_to_adjacency(
     adjacency_matrix = (adjacency_matrix + adjacency_matrix.t()) / 2
 
     return adjacency_matrix
+
+
+def get_clusters_by_kmeans(embeddings: np.ndarray, n_clusters: int) -> np.ndarray:
+    """Performs k-means clustering on the spectral-embedding space.
+
+    Parameters
+    ----------
+    embeddings : np.ndarray
+        The spectral-embedding space.
+
+    Returns
+    -------
+    np.ndarray
+        The cluster assignments for the given data.
+    """
+    from sklearn.cluster import KMeans
+
+    kmeans = KMeans(n_clusters=n_clusters, n_init=10).fit(embeddings)
+    cluster_assignments = kmeans.predict(embeddings)
+    return cluster_assignments

@@ -1,6 +1,6 @@
+import numpy as np
 import torch
 import torch.nn as nn
-import numpy as np
 
 
 class SpectralNetModel(nn.Module):
@@ -36,14 +36,14 @@ class SpectralNetModel(nn.Module):
         """
 
         m = input.shape[0]
-        _, L = torch.linalg.qr(input)
-        w = np.sqrt(m) * torch.inverse(L)
-        return w
+        _, R = torch.linalg.qr(input)
+        orthonorm_weights = np.sqrt(m) * torch.linalg.inv(R)
+        return orthonorm_weights
 
     def forward(
         self,
         x: torch.Tensor,
-        semantic_out_dim: int,
+        semantic_out_dim: int | None = None,
         should_update_orth_weights: bool = True,
     ):
         """
@@ -56,6 +56,7 @@ class SpectralNetModel(nn.Module):
             torch.Tensor: output tensor
         """
         i = 0
+        semantic_H = torch.zeros(x.shape, device=x.device)
         for layer in self.layers:
             x = layer(x)
             if self.architecture[i] == semantic_out_dim:
@@ -66,7 +67,12 @@ class SpectralNetModel(nn.Module):
         Y2_tilde = semantic_H
         if should_update_orth_weights:
             self.orthonorm_weights = self.orthonormalize(Y_tilde)
-            self.orthonorm_weights_2 = self.orthonormalize(Y2_tilde)
+            self.orthonorm_weights_2 = (
+                self.orthonormalize(Y2_tilde) if semantic_out_dim else semantic_H.T
+            )
         Y = Y_tilde @ self.orthonorm_weights
-        ortho_H = Y2_tilde @ self.orthonorm_weights_2
+        if not torch.all(semantic_H == 0):
+            ortho_H = Y2_tilde @ self.orthonorm_weights_2
+        else:
+            ortho_H = None
         return Y, semantic_H, ortho_H
