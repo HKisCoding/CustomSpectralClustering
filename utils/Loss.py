@@ -139,3 +139,116 @@ class ContrastiveLoss(nn.Module):
             (label * positive_distance) + ((1 - label) * negative_distance)
         )
         return loss
+
+
+class KLClusteringLoss(nn.Module):
+    """
+    Kullback-Leibler divergence loss for clustering based on soft assignments.
+
+    This implements the clustering loss from Deep Embedded Clustering (DEC) where:
+    - Q is the soft assignment distribution
+    - P is the target distribution computed by sharpening Q
+    """
+
+    def __init__(self, alpha=1.0):
+        """
+        Args:
+            alpha: degrees of freedom parameter for Student's t-distribution (default: 1.0)
+        """
+        super(KLClusteringLoss, self).__init__()
+        self.alpha = alpha
+
+    def compute_soft_assignments(self, embeddings, cluster_centers):
+        """
+        Compute soft assignment distribution Q using Student's t-distribution.
+
+        Args:
+            embeddings: tensor of shape (n_samples, embedding_dim) - spectral embedded points y_i
+            cluster_centers: tensor of shape (n_clusters, embedding_dim) - cluster centers μ_j
+
+        Returns:
+            Q: soft assignment matrix of shape (n_samples, n_clusters)
+        """
+        # Compute squared distances between embeddings and cluster centers
+        # ||y_i - μ_j||^2
+        distances = torch.cdist(embeddings, cluster_centers, p=2) ** 2
+
+        # Compute q_ij using Student's t-distribution kernel
+        # q_ij = (1 + ||y_i - μ_j||^2 / α)^(-(α+1)/2)
+        numerator = (1 + distances / self.alpha) ** (-(self.alpha + 1) / 2)
+
+        # Normalize to get probability distribution (sum over j for each i)
+        Q = numerator / torch.sum(numerator, dim=1, keepdim=True)
+
+        return Q
+
+    def compute_target_distribution(self, Q):
+        """
+        Compute target distribution P by sharpening Q.
+
+        Args:
+            Q: soft assignment matrix of shape (n_samples, n_clusters)
+
+        Returns:
+            P: target distribution of shape (n_samples, n_clusters)
+        """
+        # Square the soft assignments and normalize by cluster frequency
+        # p_ij = q_ij^2 / Σ_i q_ij
+
+        f_j = torch.sum(Q, dim=0, keepdim=True)
+        squared_Q = Q**2 / f_j
+
+        # # Avoid division by zero
+        # cluster_frequencies = torch.clamp(cluster_frequencies, min=1e-10)
+
+        # Normalize by cluster frequencies
+        cluster_frequency = squared_Q / f_j
+
+        # Normalize to get probability distribution (sum over j for each i)
+        P = cluster_frequency / torch.sum(cluster_frequency, dim=1, keepdim=True)
+
+        return P
+
+    def kl_divergence(self, P, Q):
+        """
+        Compute KL divergence KL(P || Q).
+
+        Args:
+            P: target distribution of shape (n_samples, n_clusters)
+            Q: soft assignment distribution of shape (n_samples, n_clusters)
+
+        Returns:
+            kl_loss: scalar tensor representing the KL divergence loss
+        """
+        # Add small epsilon to avoid log(0)
+        # epsilon = 1e-10
+        # Q_safe = torch.clamp(Q, min=epsilon)
+
+        # Compute KL(P || Q) = Σ_i Σ_j p_ij * log(p_ij / q_ij)
+        kl_loss = torch.sum(P * torch.log(P / Q))
+
+        return kl_loss
+
+    def forward(self, embeddings, cluster_centers):
+        """
+        Forward pass computing the complete clustering loss.
+
+        Args:
+            embeddings: tensor of shape (n_samples, embedding_dim)
+            cluster_centers: tensor of shape (n_clusters, embedding_dim)
+
+        Returns:
+            loss: scalar tensor representing the clustering loss
+            Q: soft assignment distribution (for auxiliary outputs)
+            P: target distribution (for auxiliary outputs)
+        """
+        # Compute soft assignments Q
+        Q = self.compute_soft_assignments(embeddings, cluster_centers)
+
+        # Compute target distribution P
+        P = self.compute_target_distribution(Q)
+
+        # Compute KL divergence loss
+        loss = self.kl_divergence(P, Q)
+
+        return loss

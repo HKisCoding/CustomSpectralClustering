@@ -74,6 +74,8 @@ class SelfAdjustGraphConfig(BaseConfig):
     delta: float = 0.1
     eta: float = 0.1
     cluster: int = 10
+    auxillary_loss_kind: str = "entropy"
+    auxillary_loss_alpha: float = 1.0
 
 
 @dataclass

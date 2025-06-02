@@ -15,10 +15,10 @@ from tqdm import tqdm
 
 from src.models.net.SCHOOL import SCHOOL
 from utils.Config import Config
-from utils.Loss import SpectralNetLoss
+from utils.Loss import KLClusteringLoss, SpectralNetLoss
 from utils.Metrics import run_evaluate_with_labels
 from utils.Process import pairwise_distance
-from utils.Utils import get_clusters_by_kmeans
+from utils.Utils import get_cluster_centroids, get_clusters_by_kmeans
 
 from .BaseTrainer import BaseTrainer
 
@@ -45,6 +45,8 @@ class SelfAdjustGraphTrainer(BaseTrainer):
         self.mu = self.config.self_adjust_graph.mu
         self.delta = self.config.self_adjust_graph.delta
         self.cluster = self.config.self_adjust_graph.cluster
+        self.kl_alpha = self.config.self_adjust_graph.auxillary_loss_alpha
+        self.auxillary_loss_kind = self.config.self_adjust_graph.auxillary_loss_kind
 
         self.feat_size = self.config.school.feat_size
         self.out_feat = self.config.school.out_feat
@@ -134,6 +136,47 @@ class SelfAdjustGraphTrainer(BaseTrainer):
 
         return A, alpha, beta, idx
 
+    def auxillary_loss(self, Y: torch.Tensor, kind="entropy"):
+        loss = 0
+        if kind == "entropy":
+            p_i = Y.sum(0).view(-1)
+            p_i = (p_i + INF) / (p_i.sum() + INF)
+            p_i = torch.abs(p_i)
+            # The second term in Eq. (13): entropy loss
+            loss = (
+                math.log(p_i.size(0) + INF) + ((p_i + INF) * torch.log(p_i + INF)).sum()
+            )
+        elif kind == "KLdivergence":
+            centroids = get_cluster_centroids(Y.detach().cpu().numpy(), self.cluster)
+            centroids = torch.tensor(centroids, device=Y.device)
+            loss = KLClusteringLoss(alpha=self.kl_alpha)(Y, centroids)
+        return loss
+
+    def compute_soft_assignments(self, embeddings, cluster_centers):
+        """
+        Compute soft assignment distribution Q using Student's t-distribution.
+
+        Args:
+            embeddings: tensor of shape (n_samples, embedding_dim) - spectral embedded points y_i
+            cluster_centers: tensor of shape (n_clusters, embedding_dim) - cluster centers μ_j
+
+        Returns:
+            Q: soft assignment matrix of shape (n_samples, n_clusters)
+        """
+        # Compute squared distances between embeddings and cluster centers
+        # ||y_i - μ_j||^2
+        alpha = 1.0
+        distances = torch.cdist(embeddings, cluster_centers, p=2) ** 2
+
+        # Compute q_ij using Student's t-distribution kernel
+        # q_ij = (1 + ||y_i - μ_j||^2 / α)^(-(α+1)/2)
+        numerator = (1 + distances / alpha) ** (-(alpha + 1) / 2)
+
+        # Normalize to get probability distribution (sum over j for each i)
+        Q = numerator / torch.sum(numerator, dim=1, keepdim=True)
+
+        return Q
+
     def train(
         self,
         features: Optional[torch.Tensor] = None,
@@ -181,12 +224,18 @@ class SelfAdjustGraphTrainer(BaseTrainer):
                         X_grad, X_orth, idx, alpha, beta, A
                     )
 
+                    cluster_centers = get_cluster_centroids(
+                        Y.detach().cpu().numpy(), self.cluster
+                    )
+                    cluster_centers = torch.tensor(cluster_centers, device=Y.device)
+                    Q = self.compute_soft_assignments(Y, cluster_centers)
+
                     # # Replace NaN values in model parameters
                     # self.replace_nan_in_model()
 
                     spectral_loss = self.criterion(A_updated, Y)
 
-                    p_i = Y.sum(0).view(-1)
+                    p_i = Q.sum(0).view(-1)
                     p_i = (p_i + INF) / (p_i.sum() + INF)
                     p_i = torch.abs(p_i)
                     # The second term in Eq. (13): entropy loss
@@ -221,7 +270,7 @@ class SelfAdjustGraphTrainer(BaseTrainer):
                     loss_consistency = loss_inv + self.mu * loss_uni
 
                     # The second term in Eq. (13): cluster-level loss
-                    Y_hat = torch.argmax(Y, dim=1)
+                    Y_hat = torch.argmax(Q, dim=1)
                     cluster_center = torch.stack(
                         [
                             torch.mean(embs_hom[Y_hat == i], dim=0)
@@ -281,8 +330,8 @@ class SelfAdjustGraphTrainer(BaseTrainer):
                 self.scheduler.step(val_loss)
 
                 # Save best model based on validation loss
-                if val_loss < self.best_val_loss:
-                    self.best_val_loss = val_loss
+                if epoch_spectral_loss < self.best_val_loss:
+                    self.best_val_loss = epoch_spectral_loss
                     torch.save(
                         {
                             "epoch": epoch,
@@ -326,7 +375,6 @@ class SelfAdjustGraphTrainer(BaseTrainer):
         total_time = time.time() - start_time
         self.logger.info(f"Training completed in {total_time:.2f} seconds")
         return results
-        # return validation_result
 
     def validation(self, X_val: torch.Tensor):
         with torch.no_grad():
@@ -363,5 +411,11 @@ class SelfAdjustGraphTrainer(BaseTrainer):
             )
             self.embeddings_ = self.embeddings_.detach().cpu().numpy()
 
-        cluster_assignments = get_clusters_by_kmeans(self.embeddings_, n_clusters)
+        # cluster_assignments = get_clusters_by_kmeans(self.embeddings_, n_clusters)
+        cluster_centers = get_cluster_centroids(self.embeddings_, n_clusters)
+        cluster_centers = torch.tensor(cluster_centers, device=X.device)
+        Y = torch.tensor(self.embeddings_, device=X.device)
+        Q = self.compute_soft_assignments(Y, cluster_centers)
+        cluster_assignments = torch.argmax(Q, dim=1).detach().cpu().numpy()
+
         return cluster_assignments

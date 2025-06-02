@@ -1,8 +1,5 @@
-import json
-import logging
 import os
 
-import matplotlib.pyplot as plt
 import numpy as np
 import torch
 from annoy import AnnoyIndex
@@ -297,3 +294,11 @@ def get_clusters_by_kmeans(embeddings: np.ndarray, n_clusters: int) -> np.ndarra
     kmeans = KMeans(n_clusters=n_clusters, n_init=10).fit(embeddings)
     cluster_assignments = kmeans.predict(embeddings)
     return cluster_assignments
+
+
+def get_cluster_centroids(embeddings: np.ndarray, n_clusters: int) -> np.ndarray:
+    from sklearn.cluster import KMeans
+
+    kmeans = KMeans(n_clusters=n_clusters, n_init=10).fit(embeddings)
+    centroids = kmeans.cluster_centers_
+    return centroids
