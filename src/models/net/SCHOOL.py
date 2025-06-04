@@ -11,13 +11,14 @@ from .SpectralNet import SpectralNetModel
 
 
 class SCHOOL(nn.Module):
-    def __init__(self, config: Config):
+    def __init__(self, config: Config, orthonorm_weights: torch.Tensor | None = None):
         super().__init__()
         self.config = config
 
         self.spectral_net = SpectralNetModel(
             architecture=self.config.school.spectral_architecture,
             input_dim=self.config.school.feat_size,
+            orthonorm_weights=orthonorm_weights,
         ).to(self.config.device)
 
         self.graph_encoder = GCN(

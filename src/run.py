@@ -11,7 +11,7 @@ from utils.Metrics import run_evaluate_with_labels
 # Configuration for SelfAdjustGraphTrainer
 config_dict = {
     "device": torch.device("cuda" if torch.cuda.is_available() else "cpu"),
-    "training": {"lr": 0.0005, "num_epoch": 300},
+    "training": {"lr": 0.002, "num_epoch": 200},
     "self_adjust_graph": {
         "g_dim": 128,
         "gamma": 1,
@@ -153,4 +153,4 @@ def run_validation():
 
 
 if __name__ == "__main__":
-    run_validation()
+    run_self_adjust_graph_net()

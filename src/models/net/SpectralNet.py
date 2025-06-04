@@ -4,11 +4,17 @@ import torch.nn as nn
 
 
 class SpectralNetModel(nn.Module):
-    def __init__(self, architecture: list, input_dim: int):
+    def __init__(
+        self,
+        architecture: list,
+        input_dim: int,
+        orthonorm_weights: torch.Tensor | None = None,
+    ):
         super(SpectralNetModel, self).__init__()
         self.architecture = architecture
         self.layers = nn.ModuleList()
         self.input_dim = input_dim
+        self.orthonorm_weights = orthonorm_weights
 
         current_dim = self.input_dim
         for i, layer in enumerate(self.architecture):

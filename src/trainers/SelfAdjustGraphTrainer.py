@@ -59,9 +59,16 @@ class SelfAdjustGraphTrainer(BaseTrainer):
         # )
         self.model = SCHOOL(self.config).to(self.config.device)
         self.criterion = SpectralNetLoss()
-        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.lr)
+        self.kl_loss = KLClusteringLoss(alpha=self.kl_alpha)
+        self.optimizer = torch.optim.AdamW(
+            self.model.parameters(),
+            lr=self.lr,
+            # eps=1e-6,
+            # weight_decay=0.0005,
+            # amsgrad=True,
+        )
         self.scheduler = optim.lr_scheduler.ReduceLROnPlateau(
-            self.optimizer, mode="min", factor=0.1, patience=10
+            self.optimizer, mode="min", factor=0.1, patience=1
         )
         self.embedding = nn.Sequential(
             nn.Linear(
@@ -71,9 +78,6 @@ class SelfAdjustGraphTrainer(BaseTrainer):
             ),
             nn.ReLU(inplace=True),
         ).to(self.config.device)
-
-        # Track best validation loss
-        self.best_val_loss = float("inf")
 
     def replace_nan_in_model(self):
         """Replace NaN values with 1e-8 in all model parameters."""
@@ -207,6 +211,7 @@ class SelfAdjustGraphTrainer(BaseTrainer):
         start_time = time.time()
         pbar = tqdm(range(self.num_epoch), desc="Training")
         results = []
+        best_train_loss = float("inf")
         for epoch in pbar:
             train_loss = 0
             epoch_spectral_loss = 0
@@ -271,18 +276,20 @@ class SelfAdjustGraphTrainer(BaseTrainer):
 
                     # The second term in Eq. (13): cluster-level loss
                     Y_hat = torch.argmax(Q, dim=1)
-                    cluster_center = torch.stack(
+                    avg_pooling_cluster_center = torch.stack(
                         [
                             torch.mean(embs_hom[Y_hat == i], dim=0)
                             for i in range(self.cluster)
                         ]
                     )  # Shape: (num_clusters, embedding_dim)
                     # Gather positive cluster centers
-                    positive = cluster_center[Y_hat]
-                    # The first term in Eq. (11)
-                    inter_c = positive.T @ embs_graph
-                    inter_c = F.normalize(inter_c, p=2, dim=1)
-                    loss_spe_inv = -torch.diagonal(inter_c).sum()
+                    # positive = avg_pooling_cluster_center[Y_hat]
+                    # # The first term in Eq. (11)
+                    # inter_c = positive.T @ embs_graph
+                    # inter_c = F.normalize(inter_c, p=2, dim=1)
+                    # loss_spe_inv = -torch.diagonal(inter_c).sum()
+
+                    loss_spe_inv = self.kl_loss(embs_graph, avg_pooling_cluster_center)
 
                     loss = (
                         spectral_loss
@@ -293,7 +300,7 @@ class SelfAdjustGraphTrainer(BaseTrainer):
                     # Backward pass
                     loss.backward()
 
-                    # Add gradient clipping
+                    # # Add gradient clipping
                     torch.nn.utils.clip_grad_norm_(
                         self.model.parameters(), max_norm=1.0
                     )
@@ -329,22 +336,6 @@ class SelfAdjustGraphTrainer(BaseTrainer):
 
                 self.scheduler.step(val_loss)
 
-                # Save best model based on validation loss
-                if epoch_spectral_loss < self.best_val_loss:
-                    self.best_val_loss = epoch_spectral_loss
-                    torch.save(
-                        {
-                            "epoch": epoch,
-                            "model_state_dict": self.model.state_dict(),
-                            "optimizer_state_dict": self.optimizer.state_dict(),
-                            "val_loss": val_loss,
-                        },
-                        os.path.join(self.weight_path, "weights", "best_model.pt"),
-                    )
-                    self.logger.info(
-                        f"Saved new best model with validation loss: {val_loss:.4f}"
-                    )
-
                 self.logger.info(
                     f"Epoch [{epoch + 1}/{self.num_epoch}] "
                     f"Loss: {train_loss:.4f} "
@@ -353,14 +344,31 @@ class SelfAdjustGraphTrainer(BaseTrainer):
                     f"Time: {epoch_time:.2f}s"
                 )
 
-                result = {
-                    "train_loss": train_loss,
-                    "spectral_loss": epoch_spectral_loss,
-                    # "node_invariant_loss": loss_consistency.item(),
-                    # "cluster_level_loss": loss_spe_inv.item(),
-                    "val_loss": val_loss,
-                }
-                results.append(result["spectral_loss"])
+            if epoch_spectral_loss < best_train_loss:
+                best_train_loss = epoch_spectral_loss
+                torch.save(
+                    {
+                        "epoch": epoch,
+                        "model_state_dict": self.model.state_dict(),
+                        "optimizer_state_dict": self.optimizer.state_dict(),
+                        "train_loss": train_loss,
+                        "val_loss": val_loss,
+                        # "orthonorm_weights": self.model.spectral_net.orthonorm_weights,
+                    },
+                    os.path.join(self.weight_path, "weights", "best_model.pt"),
+                )
+                self.logger.info(
+                    f"Saved new best model with spectral loss: {epoch_spectral_loss:.4f}"
+                )
+
+            result = {
+                "train_loss": train_loss,
+                "spectral_loss": epoch_spectral_loss,
+                # "node_invariant_loss": loss_consistency.item(),
+                # "cluster_level_loss": loss_spe_inv.item(),
+                "val_loss": val_loss,
+            }
+            results.append(result["spectral_loss"])
 
         # cluster_assignments = torch.argmax(Y_pred, dim=1).detach().cpu().numpy()
         # y_target = y_val.detach().cpu().numpy()
@@ -399,8 +407,11 @@ class SelfAdjustGraphTrainer(BaseTrainer):
             if os.path.exists(best_model_path):
                 checkpoint = torch.load(best_model_path)
                 self.model.load_state_dict(checkpoint["model_state_dict"])
+                # self.model.spectral_net.orthonorm_weights = checkpoint[
+                #     "orthonorm_weights"
+                # ]
                 self.logger.info(
-                    f"Loaded best model from epoch {checkpoint['epoch']} with validation loss {checkpoint['val_loss']:.4f}"
+                    f"Loaded best model from epoch {checkpoint['epoch']} with loss {checkpoint['train_loss']:.4f}"
                 )
             else:
                 self.logger.warning("No best model found, using current model state")
