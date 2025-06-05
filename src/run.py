@@ -11,7 +11,7 @@ from utils.Metrics import run_evaluate_with_labels
 # Configuration for SelfAdjustGraphTrainer
 config_dict = {
     "device": torch.device("cuda" if torch.cuda.is_available() else "cpu"),
-    "training": {"lr": 0.002, "num_epoch": 200},
+    "training": {"lr": 0.001, "num_epoch": 100},
     "self_adjust_graph": {
         "g_dim": 128,
         "gamma": 1,
@@ -67,7 +67,7 @@ def run_self_adjust_graph_net():
             continue
         finally:
             cluster_assignment = trainer.predict(
-                X=features, n_clusters=n_cluster, use_weight=True
+                X=features, n_clusters=n_cluster, use_weight=False
             )
             y_target = labels.detach().cpu().numpy()
             result = run_evaluate_with_labels(
@@ -154,3 +154,4 @@ def run_validation():
 
 if __name__ == "__main__":
     run_self_adjust_graph_net()
+    # run_validation()

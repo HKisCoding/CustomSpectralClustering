@@ -60,15 +60,15 @@ class SelfAdjustGraphTrainer(BaseTrainer):
         self.model = SCHOOL(self.config).to(self.config.device)
         self.criterion = SpectralNetLoss()
         self.kl_loss = KLClusteringLoss(alpha=self.kl_alpha)
-        self.optimizer = torch.optim.AdamW(
+        self.optimizer = torch.optim.Adam(
             self.model.parameters(),
             lr=self.lr,
-            # eps=1e-6,
+            eps=1e-6,
             # weight_decay=0.0005,
-            # amsgrad=True,
+            amsgrad=True,
         )
         self.scheduler = optim.lr_scheduler.ReduceLROnPlateau(
-            self.optimizer, mode="min", factor=0.1, patience=1
+            self.optimizer, mode="min", factor=0.5, patience=1
         )
         self.embedding = nn.Sequential(
             nn.Linear(
@@ -353,7 +353,7 @@ class SelfAdjustGraphTrainer(BaseTrainer):
                         "optimizer_state_dict": self.optimizer.state_dict(),
                         "train_loss": train_loss,
                         "val_loss": val_loss,
-                        # "orthonorm_weights": self.model.spectral_net.orthonorm_weights,
+                        "orthonorm_weights": self.model.spectral_net.orthonorm_weights,
                     },
                     os.path.join(self.weight_path, "weights", "best_model.pt"),
                 )
@@ -369,16 +369,6 @@ class SelfAdjustGraphTrainer(BaseTrainer):
                 "val_loss": val_loss,
             }
             results.append(result["spectral_loss"])
-
-        # cluster_assignments = torch.argmax(Y_pred, dim=1).detach().cpu().numpy()
-        # y_target = y_val.detach().cpu().numpy()
-
-        # validation_result = run_evaluate_with_labels(
-        #     cluster_assignments=cluster_assignments, y=y_target, n_clusters=self.cluster
-        # )
-        # Convert results list to DataFrame
-        # results_df = pd.DataFrame(results)
-        # results_df.to_csv(f"output\\{self.config.dataset.dataset}_loss.csv")
 
         total_time = time.time() - start_time
         self.logger.info(f"Training completed in {total_time:.2f} seconds")
@@ -407,9 +397,9 @@ class SelfAdjustGraphTrainer(BaseTrainer):
             if os.path.exists(best_model_path):
                 checkpoint = torch.load(best_model_path)
                 self.model.load_state_dict(checkpoint["model_state_dict"])
-                # self.model.spectral_net.orthonorm_weights = checkpoint[
-                #     "orthonorm_weights"
-                # ]
+                self.model.spectral_net.orthonorm_weights = checkpoint[
+                    "orthonorm_weights"
+                ]
                 self.logger.info(
                     f"Loaded best model from epoch {checkpoint['epoch']} with loss {checkpoint['train_loss']:.4f}"
                 )
@@ -418,7 +408,7 @@ class SelfAdjustGraphTrainer(BaseTrainer):
 
         with torch.no_grad():
             self.embeddings_, _, _ = self.model.spectral_net(
-                X, should_update_orth_weights=True
+                X, should_update_orth_weights=False
             )
             self.embeddings_ = self.embeddings_.detach().cpu().numpy()
 
