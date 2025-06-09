@@ -2,6 +2,8 @@ import os
 
 import pandas as pd
 import torch
+import torch.nn.functional as F
+import torchvision.datasets as datasets
 import torchvision.transforms as transforms
 from PIL import Image
 from torch.nn import Sequential
@@ -127,12 +129,49 @@ def create_features_object(dataset_name, backbone_name, device):
     load_feature_from_scratch(dataset_name, model, device=device)
 
 
-if __name__ == "__main__":
-    dataset_name = "Caltech_101"
-    backbone_name = Config().backbone.name
-
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-
-    create_features_object(
-        dataset_name=dataset_name, backbone_name=backbone_name, device=device
+def create_mnist_features_object(data_path):
+    # Load MNIST dataset from existing path
+    transform = transforms.Compose(
+        [
+            transforms.ToTensor(),
+        ]
     )
+
+    mnist = datasets.MNIST(
+        root=data_path, train=True, download=False, transform=transform
+    )
+    data_loader = DataLoader(mnist, batch_size=128, shuffle=False)
+
+    # Initialize lists to store features and labels
+    features = []
+    labels = []
+
+    # Process each batch
+    with torch.no_grad():
+        for images, batch_labels in data_loader:
+            # Flatten the images (28x28 = 784 dimensions)
+            batch_features = images.view(images.size(0), -1)
+            features.append(batch_features)
+            labels.append(batch_labels)
+
+    # Concatenate all batches
+    features = torch.cat(features, dim=0)
+    labels = torch.cat(labels, dim=0)
+
+    # Save features and labels
+    save_dir = os.path.join(data_path, "processed")
+    os.makedirs(save_dir, exist_ok=True)
+    torch.save(features, os.path.join(save_dir, "mnist_features.pt"))
+    torch.save(labels, os.path.join(save_dir, "mnist_labels.pt"))
+
+
+if __name__ == "__main__":
+    # dataset_name = "Caltech_101"
+    # backbone_name = Config().backbone.name
+
+    # device = "cuda" if torch.cuda.is_available() else "cpu"
+
+    # create_features_object(
+    #     dataset_name=dataset_name, backbone_name=backbone_name, device=device
+    # )
+    create_mnist_features_object("dataset/MNIST")

@@ -28,7 +28,7 @@ config_dict = {
         "gcn_out_size": 256,
         "spectral_architecture": [1024, 1024, 256],
     },
-    "dataset": {"dataset": "MSRC-v2", "batch_size": 512},
+    "dataset": {"dataset": "mnist", "batch_size": 1024},
     "backbone": {
         "name": "resnet18",
         "pretrained": True,
@@ -45,8 +45,10 @@ def run_self_adjust_graph_net():
 
     # Load MSRC-v2 dataset and extract features
 
-    features = torch.load("dataset\\resnet\\MSRC-v2_Feature.pt")
-    labels = torch.load("dataset\\resnet\\MSRC-v2_Label.pt")
+    dataset = config.dataset.dataset
+
+    features = torch.load(config.dataset.data_path[dataset]["features"])
+    labels = torch.load(config.dataset.data_path[dataset]["labels"])
 
     n_cluster = len(torch.unique(labels))
 

@@ -307,22 +307,20 @@ class SelfAdjustGraphTrainer(BaseTrainer):
 
                     self.optimizer.step()
 
-                    train_loss = loss.item()
-                    epoch_spectral_loss = spectral_loss.item()
+                    train_loss += loss.item()
+                    epoch_spectral_loss += spectral_loss.item()
+                # Update progress bar with current metrics
+                pbar.set_postfix(
+                    {
+                        "loss": f"{loss.item():.4f}",
+                        "spec_loss": f"{spectral_loss.item():.4f}",
+                    }
+                )
 
             train_loss /= len(train_loader)
             epoch_spectral_loss /= len(train_loader)
             # Calculate epoch time
             epoch_time = time.time() - epoch_start_time
-
-            # Update progress bar with current metrics
-            pbar.set_postfix(
-                {
-                    "loss": f"{train_loss:.4f}",
-                    "spec_loss": f"{epoch_spectral_loss:.4f}",
-                    "time": f"{epoch_time:.2f}s",
-                }
-            )
 
             # Log detailed metrics every 10 epochs
             if (epoch + 1) % 10 == 0:

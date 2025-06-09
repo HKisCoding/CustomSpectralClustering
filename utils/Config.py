@@ -18,6 +18,14 @@ class DatasetConfig(BaseConfig):
 
     dataset: str = "default"
     batch_size: int = 32
+    data_path: dict = field(
+        default_factory=lambda: {
+            "mnist": {
+                "features": "dataset/MNIST/processed/mnist_features.pt",
+                "labels": "dataset/MNIST/processed/mnist_labels.pt",
+            }
+        }
+    )
 
 
 @dataclass
