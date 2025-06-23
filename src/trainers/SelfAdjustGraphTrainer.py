@@ -216,6 +216,8 @@ class SelfAdjustGraphTrainer(BaseTrainer):
             train_loss = 0
             epoch_spectral_loss = 0
             val_loss = 0
+            epoch_node_consistency_loss = 0
+            epoch_cluster_loss = 0
             self.model.train()
             epoch_start_time = time.time()
             for (X_grad, _), (X_orth, _) in zip(train_loader, ortho_loader):
@@ -309,6 +311,8 @@ class SelfAdjustGraphTrainer(BaseTrainer):
 
                     train_loss += loss.item()
                     epoch_spectral_loss += spectral_loss.item()
+                    epoch_node_consistency_loss += loss_consistency.item()
+                    epoch_cluster_loss += loss_spe_inv.item()
                 # Update progress bar with current metrics
                 pbar.set_postfix(
                     {
@@ -339,11 +343,13 @@ class SelfAdjustGraphTrainer(BaseTrainer):
                     f"Loss: {train_loss:.4f} "
                     f"Val Loss: {val_loss:.4f} "
                     f"Spectral Loss: {epoch_spectral_loss:.4f} "
+                    f"Node Consistency Loss: {epoch_node_consistency_loss:.4f} "
+                    f"Cluster Loss: {epoch_cluster_loss:.4f} "
                     f"Time: {epoch_time:.2f}s"
                 )
 
-            if epoch_spectral_loss < best_train_loss:
-                best_train_loss = epoch_spectral_loss
+            if train_loss < best_train_loss:
+                best_train_loss = train_loss
                 torch.save(
                     {
                         "epoch": epoch,
@@ -356,17 +362,17 @@ class SelfAdjustGraphTrainer(BaseTrainer):
                     os.path.join(self.weight_path, "weights", "best_model.pt"),
                 )
                 self.logger.info(
-                    f"Saved new best model with spectral loss: {epoch_spectral_loss:.4f}"
+                    f"Saved new best model with train loss: {train_loss:.4f}"
                 )
 
             result = {
                 "train_loss": train_loss,
                 "spectral_loss": epoch_spectral_loss,
-                # "node_invariant_loss": loss_consistency.item(),
-                # "cluster_level_loss": loss_spe_inv.item(),
+                "node_consistency_loss": epoch_node_consistency_loss,
+                "cluster_loss": epoch_cluster_loss,
                 "val_loss": val_loss,
             }
-            results.append(result["spectral_loss"])
+            results.append(result)
 
         total_time = time.time() - start_time
         self.logger.info(f"Training completed in {total_time:.2f} seconds")

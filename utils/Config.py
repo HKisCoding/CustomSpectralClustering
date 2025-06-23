@@ -23,7 +23,15 @@ class DatasetConfig(BaseConfig):
             "mnist": {
                 "features": "dataset/MNIST/processed/mnist_features.pt",
                 "labels": "dataset/MNIST/processed/mnist_labels.pt",
-            }
+            },
+            "Caltech_101": {
+                "features": "dataset/resnet/Caltech_101_Feature.pt",
+                "labels": "dataset/resnet/Caltech_101_Label.pt",
+            },
+            "MSRC-v2": {
+                "features": "dataset/resnet/MSRC-v2_Feature.pt",
+                "labels": "dataset/resnet/MSRC-v2_Label.pt",
+            },
         }
     )
 
