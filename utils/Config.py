@@ -32,6 +32,15 @@ class DatasetConfig(BaseConfig):
                 "features": "dataset/resnet/MSRC-v2_Feature.pt",
                 "labels": "dataset/resnet/MSRC-v2_Label.pt",
             },
+            "colon_cancer": {
+                "path": "dataset/colon_cancer/colon_cancer.csv",
+            },
+            "leumika": {
+                "path": "dataset/Leukemia/leukemia.csv",
+            },
+            "prokaryotic": {
+                "path": "dataset/prokaryotic.mat",
+            },
         }
     )
 
@@ -42,7 +51,7 @@ class TrainingConfig(BaseConfig):
 
     lr: float = 0.002
     num_epoch: int = 100
-    weight_path: str = "output"
+    weight_path: str = "output/weights"
     save_every: int = 10
 
 

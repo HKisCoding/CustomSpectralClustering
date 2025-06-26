@@ -212,6 +212,7 @@ class SelfAdjustGraphTrainer(BaseTrainer):
         pbar = tqdm(range(self.num_epoch), desc="Training")
         results = []
         best_train_loss = float("inf")
+        best_spectral_loss = float("inf")
         for epoch in pbar:
             train_loss = 0
             epoch_spectral_loss = 0
@@ -365,6 +366,23 @@ class SelfAdjustGraphTrainer(BaseTrainer):
                     f"Saved new best model with train loss: {train_loss:.4f}"
                 )
 
+            if epoch_spectral_loss < best_spectral_loss:
+                best_spectral_loss = epoch_spectral_loss
+                torch.save(
+                    {
+                        "epoch": epoch,
+                        "model_state_dict": self.model.state_dict(),
+                        "optimizer_state_dict": self.optimizer.state_dict(),
+                        "train_loss": train_loss,
+                        "val_loss": val_loss,
+                        "orthonorm_weights": self.model.spectral_net.orthonorm_weights,
+                    },
+                    os.path.join(self.weight_path, "weights", "best_spectral_loss.pt"),
+                )
+                self.logger.info(
+                    f"Saved new best model with spectral loss: {epoch_spectral_loss:.4f}"
+                )
+
             result = {
                 "train_loss": train_loss,
                 "spectral_loss": epoch_spectral_loss,
@@ -391,13 +409,15 @@ class SelfAdjustGraphTrainer(BaseTrainer):
 
         return Y, val_loss.item()
 
-    def predict(self, X: torch.Tensor, n_clusters, use_weight=False) -> np.ndarray:
+    def predict(
+        self, X: torch.Tensor, n_clusters, use_weight: str | None = None
+    ) -> np.ndarray:
         X = X.view(X.size(0), -1)
         X = X.to(self.config.device)
 
         if use_weight:
             # Load the best model
-            best_model_path = os.path.join(self.weight_path, "weights", "best_model.pt")
+            best_model_path = os.path.join(self.weight_path, use_weight)
             if os.path.exists(best_model_path):
                 checkpoint = torch.load(best_model_path)
                 self.model.load_state_dict(checkpoint["model_state_dict"])

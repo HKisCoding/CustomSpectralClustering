@@ -6,6 +6,9 @@ import torch.nn.functional as F
 import torchvision.datasets as datasets
 import torchvision.transforms as transforms
 from PIL import Image
+from scipy.io import loadmat
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import LabelEncoder
 from torch.nn import Sequential
 from torch.utils.data import DataLoader, Dataset, random_split
 
@@ -163,6 +166,34 @@ def create_mnist_features_object(data_path):
     os.makedirs(save_dir, exist_ok=True)
     torch.save(features, os.path.join(save_dir, "mnist_features.pt"))
     torch.save(labels, os.path.join(save_dir, "mnist_labels.pt"))
+
+
+def get_colon_cancer(path):
+    data = pd.read_csv(path, index_col=0)
+    data = data.dropna().reset_index(drop=True)
+    enc = LabelEncoder()
+    label = enc.fit_transform(data["Dukes Stage"].to_numpy())
+    data["Gender"] = enc.fit_transform(data["Gender"].to_numpy())
+    data["Location"] = enc.fit_transform(data["Location"].to_numpy())
+    feature = data.drop(["ID_REF", "Dukes Stage"], axis=1).to_numpy()
+
+    return torch.tensor(feature).float(), torch.tensor(label)
+
+
+def get_leumika(path):
+    data = pd.read_csv(path, index_col=0)
+    label = data["label"].to_numpy()
+    feature = data.drop(["label"], axis=1).to_numpy()
+
+    return torch.tensor(feature).float(), torch.tensor(label)
+
+
+def get_prokaryotic(path):
+    data = loadmat(path)
+    label = data["truth"][:, 0]
+    feature = data["gene_repert"]
+
+    return torch.tensor(feature).float(), torch.Tensor(label)
 
 
 if __name__ == "__main__":
