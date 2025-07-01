@@ -68,7 +68,7 @@ class SelfAdjustGraphTrainer(BaseTrainer):
             amsgrad=True,
         )
         self.scheduler = optim.lr_scheduler.ReduceLROnPlateau(
-            self.optimizer, mode="min", factor=0.5, patience=1
+            self.optimizer, mode="min", factor=0.5, patience=5
         )
         self.embedding = nn.Sequential(
             nn.Linear(
@@ -197,8 +197,8 @@ class SelfAdjustGraphTrainer(BaseTrainer):
         # A, alpha, beta, idx = self.compute_graph_parameters(X)
         # X_grad = self.features
         # X_orth = self.features_orth[torch.randperm(self.features_orth.size(0))]
-        self.features = features.view(features.size(0), -1)
-        self.labels = labels
+        self.features = features.view(features.size(0), -1).to(self.config.device)
+        self.labels = labels.to(self.config.device)
 
         self.logger.info(f"Starting training for {self.num_epoch} epochs")
         self.logger.info(
@@ -303,7 +303,7 @@ class SelfAdjustGraphTrainer(BaseTrainer):
                     # Backward pass
                     loss.backward()
 
-                    # # Add gradient clipping
+                    # Add gradient clipping
                     torch.nn.utils.clip_grad_norm_(
                         self.model.parameters(), max_norm=1.0
                     )
@@ -319,6 +319,8 @@ class SelfAdjustGraphTrainer(BaseTrainer):
                     {
                         "loss": f"{loss.item():.4f}",
                         "spec_loss": f"{spectral_loss.item():.4f}",
+                        "loss_consistency": f"{loss_consistency.item():.4f}",
+                        "loss_spe_inv": f"{loss_spe_inv.item():.4f}",
                     }
                 )
 
@@ -327,17 +329,19 @@ class SelfAdjustGraphTrainer(BaseTrainer):
             # Calculate epoch time
             epoch_time = time.time() - epoch_start_time
 
+            self.scheduler.step(train_loss)
+
             # Log detailed metrics every 10 epochs
             if (epoch + 1) % 10 == 0:
-                for X_val, _ in val_loader:
-                    X_val = X_val.view(X_val.size(0), -1)
-                    _, loss = self.validation(X_val)
-                    val_loss += loss
-                val_loss /= len(val_loader)
-                # _, loss = self.validation(X_val)
-                # val_loss = loss
+                # for X_val, _ in val_loader:
+                #     X_val = X_val.view(X_val.size(0), -1)
+                #     _, loss = self.validation(X_val)
+                #     val_loss += loss
+                # val_loss /= len(val_loader)
+                # # _, loss = self.validation(X_val)
+                # # val_loss = loss
 
-                self.scheduler.step(val_loss)
+                # self.scheduler.step(val_loss)
 
                 self.logger.info(
                     f"Epoch [{epoch + 1}/{self.num_epoch}] "
@@ -360,7 +364,12 @@ class SelfAdjustGraphTrainer(BaseTrainer):
                         "val_loss": val_loss,
                         "orthonorm_weights": self.model.spectral_net.orthonorm_weights,
                     },
-                    os.path.join(self.weight_path, "weights", "best_model.pt"),
+                    os.path.join(
+                        self.weight_path,
+                        "weights",
+                        "self_adjust_graph",
+                        "best_model.pt",
+                    ),
                 )
                 self.logger.info(
                     f"Saved new best model with train loss: {train_loss:.4f}"
@@ -377,7 +386,12 @@ class SelfAdjustGraphTrainer(BaseTrainer):
                         "val_loss": val_loss,
                         "orthonorm_weights": self.model.spectral_net.orthonorm_weights,
                     },
-                    os.path.join(self.weight_path, "weights", "best_spectral_loss.pt"),
+                    os.path.join(
+                        self.weight_path,
+                        "weights",
+                        "self_adjust_graph",
+                        "best_spectral_loss.pt",
+                    ),
                 )
                 self.logger.info(
                     f"Saved new best model with spectral loss: {epoch_spectral_loss:.4f}"
@@ -432,7 +446,7 @@ class SelfAdjustGraphTrainer(BaseTrainer):
 
         with torch.no_grad():
             self.embeddings_, _, _ = self.model.spectral_net(
-                X, should_update_orth_weights=False
+                X, should_update_orth_weights=True
             )
             self.embeddings_ = self.embeddings_.detach().cpu().numpy()
 

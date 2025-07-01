@@ -6,6 +6,7 @@ from tqdm import trange
 
 from src.models.net.SiameseNet import SiameseNetModel
 from src.models.net.SpectralNet import SpectralNetModel
+from src.trainers.BaseTrainer import BaseTrainer
 from src.trainers.SiameseNetTrainer import SiameseTrainer
 from utils.Config import Config
 from utils.Loss import SpectralNetLoss
@@ -39,7 +40,7 @@ class PaddedDataset(Dataset):
             return self.dataset[idx % self.original_length]
 
 
-class SpectralNetTrainer:
+class SpectralNetTrainer(BaseTrainer):
     def __init__(self, config: Config, device: torch.device, is_sparse: bool):
         self.device = device
         self.is_sparse = is_sparse
@@ -90,35 +91,35 @@ class SpectralNetTrainer:
         )
         return W
 
-    def _get_data_loader(self) -> tuple:
-        """
-        This function returns the data loaders for training, validation and testing.
-        The last batch will be padded by repeating samples from the beginning of the dataset.
+    # def _get_data_loader(self) -> tuple:
+    #     """
+    #     This function returns the data loaders for training, validation and testing.
+    #     The last batch will be padded by repeating samples from the beginning of the dataset.
 
-        Returns:
-            tuple:  The data loaders
-        """
-        if self.y is None:
-            self.y = torch.zeros(len(self.X))
-        train_size = int(0.9 * len(self.X))
-        valid_size = len(self.X) - train_size
-        dataset = TensorDataset(self.X, self.y)
-        train_dataset, valid_dataset = random_split(dataset, [train_size, valid_size])
+    #     Returns:
+    #         tuple:  The data loaders
+    #     """
+    #     if self.y is None:
+    #         self.y = torch.zeros(len(self.X))
+    #     train_size = int(0.9 * len(self.X))
+    #     valid_size = len(self.X) - train_size
+    #     dataset = TensorDataset(self.X, self.y)
+    #     train_dataset, valid_dataset = random_split(dataset, [train_size, valid_size])
 
-        # Create padded versions of the datasets
-        padded_train_dataset = PaddedDataset(train_dataset, self.batch_size)
-        padded_valid_dataset = PaddedDataset(valid_dataset, self.batch_size)
+    #     # Create padded versions of the datasets
+    #     padded_train_dataset = PaddedDataset(train_dataset, self.batch_size)
+    #     padded_valid_dataset = PaddedDataset(valid_dataset, self.batch_size)
 
-        train_loader = DataLoader(
-            padded_train_dataset, batch_size=self.batch_size, shuffle=True
-        )
-        ortho_loader = DataLoader(
-            padded_train_dataset, batch_size=self.batch_size, shuffle=True
-        )
-        valid_loader = DataLoader(
-            padded_valid_dataset, batch_size=self.batch_size, shuffle=False
-        )
-        return train_loader, ortho_loader, valid_loader
+    #     train_loader = DataLoader(
+    #         padded_train_dataset, batch_size=self.batch_size, shuffle=True
+    #     )
+    #     ortho_loader = DataLoader(
+    #         padded_train_dataset, batch_size=self.batch_size, shuffle=True
+    #     )
+    #     valid_loader = DataLoader(
+    #         padded_valid_dataset, batch_size=self.batch_size, shuffle=False
+    #     )
+    #     return train_loader, ortho_loader, valid_loader
 
     def train_with_siamese_net(
         self, X: torch.Tensor, y: torch.Tensor, siamese_weights: None | str = None
@@ -150,7 +151,9 @@ class SpectralNetTrainer:
             self.optimizer, mode="min", factor=self.lr_decay, patience=self.patience
         )
 
-        train_loader, ortho_loader, valid_loader = self._get_data_loader()
+        train_loader, ortho_loader, valid_loader, _ = self._get_data_loader(
+            X=self.X, y=self.y
+        )
 
         print("Training Spectral Network with SiameseNet:")
         t = trange(self.epochs, leave=True)
@@ -194,7 +197,7 @@ class SpectralNetTrainer:
 
             # Validation step
             valid_loss = self.validate(valid_loader)
-            self.scheduler.step(valid_loss)
+            self.scheduler.step(train_loss)
 
             current_lr = self.optimizer.param_groups[0]["lr"]
             if current_lr <= self.config.spectral.min_lr:
@@ -211,7 +214,9 @@ class SpectralNetTrainer:
 
         return self.spectral_net, train_result
 
-    def train(self, X: torch.Tensor, y: torch.Tensor):
+    def train(self, X: torch.Tensor | None = None, y: torch.Tensor | None = None):
+        if X is None or y is None:
+            raise ValueError("X and y are required for training")
         # Flatten the input tensor
         self.X = X.view(X.size(0), -1)
         self.y = y
@@ -229,7 +234,9 @@ class SpectralNetTrainer:
             self.optimizer, mode="min", factor=self.lr_decay, patience=self.patience
         )
 
-        train_loader, ortho_loader, valid_loader = self._get_data_loader()
+        train_loader, ortho_loader, valid_loader, _ = self._get_data_loader(
+            X=self.X, y=self.y
+        )
 
         print("Training SpectralNet:")
         t = trange(self.epochs, leave=True)
@@ -268,7 +275,7 @@ class SpectralNetTrainer:
 
             # Validation step
             valid_loss = self.validate(valid_loader)
-            self.scheduler.step(valid_loss)
+            self.scheduler.step(train_loss)
 
             current_lr = self.optimizer.param_groups[0]["lr"]
             if current_lr <= self.config.spectral.min_lr:

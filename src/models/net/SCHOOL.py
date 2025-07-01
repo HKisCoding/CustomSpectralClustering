@@ -22,9 +22,10 @@ class SCHOOL(nn.Module):
         ).to(self.config.device)
 
         self.graph_encoder = GCN(
-            in_channels=self.config.school.feat_size,
-            hidden_channels=self.config.school.gcn_hid_units,
-            out_channels=self.config.school.gcn_out_size,
+            channels_list=[
+                self.config.school.feat_size,
+                *self.config.school.gcn_architecture,
+            ],
         ).to(self.config.device)
 
     def forward(

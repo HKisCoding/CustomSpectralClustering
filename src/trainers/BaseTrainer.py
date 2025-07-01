@@ -44,7 +44,7 @@ class BaseTrainer(object):
 
     def _get_data_loader(self, X: Optional[torch.Tensor], y: Optional[torch.Tensor]):
         if X is not None and y is not None:
-            train_size = int(0.8 * len(X))
+            train_size = int(0.9 * len(X))
             valid_size = len(X) - train_size
             dataset = TensorDataset(X, y)
             train_dataset, valid_dataset = random_split(
@@ -78,5 +78,4 @@ class BaseTrainer(object):
 
     @abstractmethod
     def train(self):
-        raise NotImplementedError("Trainer must implement the train method")
         raise NotImplementedError("Trainer must implement the train method")

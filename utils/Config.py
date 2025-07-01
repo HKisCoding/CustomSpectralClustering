@@ -108,8 +108,7 @@ class SCHOOLConfig(BaseConfig):
     """SCHOOL model specific settings"""
 
     node_size: int = 512
-    gcn_hid_units: int = 256
-    gcn_out_size: int = 128
+    gcn_architecture: List[int] = field(default_factory=lambda: [512, 256])
     n_neighbors: int = 10
     feat_size: int = 512
     out_feat: int = 128
