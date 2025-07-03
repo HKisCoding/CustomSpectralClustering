@@ -1,4 +1,6 @@
+import glob
 import os
+import re
 
 import pandas as pd
 import torch
@@ -42,8 +44,9 @@ class ImageDataset(Dataset):
         label_name = self.annotation.iloc[index, 1]
         label = self.annotation.iloc[index, 2]
 
-        img_sub_dir = os.path.join(label_name, img_name)
-        img_path = os.path.join(self.image_dir, img_sub_dir)
+        img_path = os.path.join(self.image_dir, label_name, img_name)
+        if not os.path.exists(img_path):
+            img_path = os.path.join(self.image_dir, img_name)
         img = Image.open(img_path).convert("RGB")
 
         image_tensor = self.transform(img).to(self.device)
@@ -180,6 +183,51 @@ def get_colon_cancer(path):
     return torch.tensor(feature).float(), torch.tensor(label)
 
 
+def create_coil20_annotation_csv():
+    img_dir = "dataset\\coil-20"
+    output_csv = "dataset\\coil-20.csv"
+    files = glob.glob(os.path.join(img_dir, "*.png"))
+    data = []
+    for idx, f in enumerate(sorted(files)):
+        base = os.path.basename(f)
+        m = re.match(r"(obj\d+)_", base)
+        if not m:
+            continue
+        label_name = m.group(1)
+        label = int(label_name.replace("obj", ""))
+        data.append([idx, base, label_name, label])
+    df = pd.DataFrame(data, columns=["", "img_name", "label_name", "label"])
+    df.to_csv(output_csv, index=False)
+
+
+def create_image_features_coil20(backbone: str, device="cpu"):
+    """
+    Extract features for COIL20 images using the given backbone name and save them as .pt files.
+    """
+    if "resnet" in backbone:
+        model = ResNet(backbone).get_extractor()
+    else:
+        raise NotImplementedError(f"Backbone '{backbone}' not supported.")
+    annotation = "dataset/coil-20.csv"
+    image_dir = "dataset/coil-20"
+    dataset = ImageDataset(image_dir=image_dir, annotation=annotation, device=device)
+    loader = DataLoader(dataset, batch_size=32, shuffle=False)
+    features = []
+    labels = []
+    model.eval()
+    model.to(torch.device(device))
+    with torch.no_grad():
+        for imgs, lbls in loader:
+            feats = model(imgs)
+            features.append(feats.squeeze())
+            labels.append(lbls)
+    features = torch.cat(features, dim=0)
+    labels = torch.cat(labels, dim=0)
+    os.makedirs("dataset/coil-20", exist_ok=True)
+    torch.save(features, "dataset/resnet/coil-20_Feature.pt")
+    torch.save(labels, "dataset/resnet/coil-20_Label.pt")
+
+
 def get_leumika(path):
     data = pd.read_csv(path, index_col=0)
     label = data["label"].to_numpy()
@@ -197,12 +245,14 @@ def get_prokaryotic(path):
 
 
 if __name__ == "__main__":
-    # dataset_name = "Caltech_101"
-    # backbone_name = Config().backbone.name
+    dataset_name = "coil-20"
+    backbone_name = Config().backbone.name
 
-    # device = "cuda" if torch.cuda.is_available() else "cpu"
+    device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    # create_features_object(
-    #     dataset_name=dataset_name, backbone_name=backbone_name, device=device
-    # )
-    create_mnist_features_object("dataset/MNIST")
+    # create_coil20_annotation_csv()
+
+    create_features_object(
+        dataset_name=dataset_name, backbone_name=backbone_name, device=device
+    )
+    # create_mnist_features_object("dataset/MNIST")

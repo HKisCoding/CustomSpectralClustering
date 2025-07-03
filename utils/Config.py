@@ -41,6 +41,10 @@ class DatasetConfig(BaseConfig):
             "prokaryotic": {
                 "path": "dataset/prokaryotic.mat",
             },
+            "coil-20": {
+                "features": "dataset/resnet/coil-20_Feature.pt",
+                "labels": "dataset/resnet/coil-20_Label.pt",
+            },
         }
     )
 

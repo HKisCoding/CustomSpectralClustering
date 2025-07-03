@@ -9,7 +9,7 @@ from utils.Metrics import run_evaluate_with_labels
 # Configuration for SelfAdjustGraphTrainer
 config_dict = {
     "device": torch.device("cuda" if torch.cuda.is_available() else "cpu"),
-    "training": {"lr": 0.0005, "num_epoch": 100},
+    "training": {"lr": 0.0005, "num_epoch": 150},
     "self_adjust_graph": {
         "g_dim": 256,
         "gamma": 1,
@@ -23,10 +23,10 @@ config_dict = {
         "k": 10,
         "feat_size": 512,
         "out_feat": 256,
-        "gcn_architecture": [512, 256, 256],
+        "gcn_architecture": [512, 256],
         "spectral_architecture": [1024, 1024, 256],
     },
-    "dataset": {"dataset": "Caltech_101", "batch_size": 1024},
+    "dataset": {"dataset": "coil-20", "batch_size": 512},
     "backbone": {
         "name": "resnet18",
         "pretrained": True,
@@ -55,7 +55,7 @@ def run_self_adjust_graph_net():
     config.school.feat_size = features.shape[1]
     val_results = []
     losses = []
-    for i in range(1):
+    for i in range(5):
         # Create trainer
         loss = 0
         trainer = SelfAdjustGraphTrainer(config)
@@ -105,7 +105,7 @@ def run_spectral_net():
 
     val_results = []
     losses = []
-    for i in range(1):
+    for i in range(5):
         # Create trainer
         trainer = SpectralNetTrainer(config, device=config.device, is_sparse=False)
         # Train the model
@@ -168,5 +168,5 @@ def run_validation():
 
 if __name__ == "__main__":
     # run_spectral_net()
-    # run_self_adjust_graph_net()
-    run_validation()
+    run_self_adjust_graph_net()
+    # run_validation()
