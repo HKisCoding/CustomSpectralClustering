@@ -74,6 +74,6 @@ class SCHOOL(nn.Module):
 
         embs_hom = torch.mm(A, semantic_H)
 
-        embs_graph = self.graph_encoder(x=x, adj_matrix=self.init_graph.to(device))
+        embs_graph = self.graph_encoder(x=x, adj_matrix=A.to(device))
 
         return embs_hom, embs_graph, A, Y

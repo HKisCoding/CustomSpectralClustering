@@ -25,12 +25,12 @@ class DatasetConfig(BaseConfig):
                 "labels": "dataset/MNIST/processed/mnist_labels.pt",
             },
             "Caltech_101": {
-                "features": "dataset/resnet/Caltech_101_Feature.pt",
-                "labels": "dataset/resnet/Caltech_101_Label.pt",
+                "features": "dataset/embedding/resnet/Caltech_101_Feature.pt",
+                "labels": "dataset/embedding/resnet/Caltech_101_Label.pt",
             },
             "MSRC-v2": {
-                "features": "dataset/resnet/MSRC-v2_Feature.pt",
-                "labels": "dataset/resnet/MSRC-v2_Label.pt",
+                "features": "dataset/embedding/resnet/MSRC-v2_Feature.pt",
+                "labels": "dataset/embedding/resnet/MSRC-v2_Label.pt",
             },
             "colon_cancer": {
                 "path": "dataset/colon_cancer/colon_cancer.csv",
@@ -42,8 +42,16 @@ class DatasetConfig(BaseConfig):
                 "path": "dataset/prokaryotic.mat",
             },
             "coil-20": {
-                "features": "dataset/resnet/coil-20_Feature.pt",
-                "labels": "dataset/resnet/coil-20_Label.pt",
+                "features": "dataset/embedding/resnet/coil-20_Feature.pt",
+                "labels": "dataset/embedding/resnet/coil-20_Label.pt",
+            },
+            "usps_mnist": {
+                "features": "dataset/embedding/resnet/usps_mnist_Feature.pt",
+                "labels": "dataset/embedding/resnet/usps_mnist_Label.pt",
+            },
+            "usps_mnist_ae": {
+                "features": "dataset/embedding/auto_encoder/usps_mnist_Feature.pt",
+                "labels": "dataset/embedding/auto_encoder/usps_mnist_Label.pt",
             },
         }
     )
@@ -136,6 +144,21 @@ class SiameseConfig(BaseConfig):
 
 
 @dataclass
+class AutoEncoderConfig(BaseConfig):
+    """AutoEncoder model related settings"""
+
+    lr: float = 1e-3
+    n_nbg: int = 2
+    min_lr: float = 1e-7
+    epochs: int = 50
+    lr_decay: float = 0.1
+    patience: int = 10
+    architecture: List[int] = field(default_factory=lambda: [512, 512, 2048, 128])
+    batch_size: int = 1024
+    weight_path: str = "./output/weights/auto_encoder/usps_mnist.pth"
+
+
+@dataclass
 class Config(BaseConfig):
     """Main configuration class that combines all config groups"""
 
@@ -150,7 +173,7 @@ class Config(BaseConfig):
     )
     school: SCHOOLConfig = field(default_factory=SCHOOLConfig)
     siamese: SiameseConfig = field(default_factory=SiameseConfig)
-
+    auto_encoder: AutoEncoderConfig = field(default_factory=AutoEncoderConfig)
     # Device settings
     device: torch.device = field(
         default_factory=lambda: torch.device(
@@ -183,5 +206,6 @@ class Config(BaseConfig):
             "self_adjust_graph": SelfAdjustGraphConfig,
             "school": SCHOOLConfig,
             "siamese": SiameseConfig,
+            "auto_encoder": AutoEncoderConfig,
         }
         return config_classes.get(name)

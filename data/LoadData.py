@@ -4,12 +4,10 @@ import re
 
 import pandas as pd
 import torch
-import torch.nn.functional as F
 import torchvision.datasets as datasets
 import torchvision.transforms as transforms
 from PIL import Image
 from scipy.io import loadmat
-from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 from torch.nn import Sequential
 from torch.utils.data import DataLoader, Dataset, random_split
@@ -135,42 +133,6 @@ def create_features_object(dataset_name, backbone_name, device):
     load_feature_from_scratch(dataset_name, model, device=device)
 
 
-def create_mnist_features_object(data_path):
-    # Load MNIST dataset from existing path
-    transform = transforms.Compose(
-        [
-            transforms.ToTensor(),
-        ]
-    )
-
-    mnist = datasets.MNIST(
-        root=data_path, train=True, download=False, transform=transform
-    )
-    data_loader = DataLoader(mnist, batch_size=128, shuffle=False)
-
-    # Initialize lists to store features and labels
-    features = []
-    labels = []
-
-    # Process each batch
-    with torch.no_grad():
-        for images, batch_labels in data_loader:
-            # Flatten the images (28x28 = 784 dimensions)
-            batch_features = images.view(images.size(0), -1)
-            features.append(batch_features)
-            labels.append(batch_labels)
-
-    # Concatenate all batches
-    features = torch.cat(features, dim=0)
-    labels = torch.cat(labels, dim=0)
-
-    # Save features and labels
-    save_dir = os.path.join(data_path, "processed")
-    os.makedirs(save_dir, exist_ok=True)
-    torch.save(features, os.path.join(save_dir, "mnist_features.pt"))
-    torch.save(labels, os.path.join(save_dir, "mnist_labels.pt"))
-
-
 def get_colon_cancer(path):
     data = pd.read_csv(path, index_col=0)
     data = data.dropna().reset_index(drop=True)
@@ -244,15 +206,168 @@ def get_prokaryotic(path):
     return torch.tensor(feature).float(), torch.Tensor(label)
 
 
+def create_usps_mnist_features(
+    backbone_name: str = "resnet18", device: str = "cpu", batch_size: int = 32
+):
+    """
+    Load USPS MNIST dataset using torchvision ImageFolder and create feature.pt and label.pt files from backbone model.
+
+    Args:
+        backbone_name: Name of the backbone model to use for feature extraction
+        device: Device to run the model on ('cpu' or 'cuda')
+        batch_size: Batch size for processing
+    """
+    try:
+        # Define transforms matching ResNet expectations
+        transform = transforms.Compose(
+            [
+                transforms.Grayscale(num_output_channels=1),  # Convert to grayscale
+                transforms.Resize((32, 32)),
+                transforms.ToTensor(),  # Convert to tensor and normalize to [0,1]
+                transforms.Normalize((0.5,), (0.5,)),  # Normalize to [-1,1]
+            ]
+        )
+
+        # Load the dataset using ImageFolder
+        dataset_path = "dataset/MNIST/Numerals"
+        dataset = datasets.ImageFolder(root=dataset_path, transform=transform)
+        loader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
+
+        # Initialize the backbone model
+        model = ResNet(backbone_name).get_extractor()
+        model.eval()
+        model.to(torch.device(device))
+
+        features = []
+        labels = []
+        with torch.no_grad():
+            for imgs, lbls in loader:
+                imgs = imgs.to(device)
+                feats = model(imgs)
+                features.append(feats.cpu())
+                labels.append(lbls.cpu())
+
+        # Concatenate all batches
+        features = torch.cat(features, dim=0)
+        labels = torch.cat(labels, dim=0)
+
+        # Create output directory
+        os.makedirs("dataset/resnet", exist_ok=True)
+
+        # Save features and labels
+        torch.save(features, "dataset/resnet/usps_mnist_Feature.pt")
+        torch.save(labels, "dataset/resnet/usps_mnist_Label.pt")
+
+        print(f"Saved features with shape: {features.shape}")
+        print(f"Saved labels with shape: {labels.shape}")
+        print("USPS MNIST features and labels saved successfully!")
+
+    except Exception as e:
+        print(f"Error loading USPS MNIST dataset: {e}")
+        raise
+
+
+def create_mnist_ae_features(device: str = "cpu", batch_size: int = 512):
+    from src.trainers.AutoEncoderTrainer import AutoEncoderTrainer
+    from utils.Config import Config
+
+    # Define transforms for USPS MNIST data - simple grayscale conversion and normalization
+    transform = transforms.Compose(
+        [
+            transforms.Resize((64, 64)),
+            transforms.ToTensor(),  # Convert to tensor and normalize to [0,1]
+        ]
+    )
+
+    # Load the dataset using ImageFolder
+    dataset_path = "dataset/MNIST/Numerals"
+    dataset = datasets.ImageFolder(root=dataset_path, transform=transform)
+    loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+
+    # Initialize the backbone model
+    trainer = AutoEncoderTrainer(
+        config=Config().auto_encoder,
+        device=torch.device(device),
+    )
+
+    trainer.train(loader, None)
+
+    features = []
+    labels = []
+    with torch.no_grad():
+        for imgs, lbls in loader:
+            imgs = imgs.to(device)
+            feats = trainer.embed(imgs)
+            features.append(feats.cpu())
+            labels.append(lbls.cpu())
+
+    # Concatenate all batches
+    features = torch.cat(features, dim=0)
+    labels = torch.cat(labels, dim=0)
+
+    # Create output directory
+    os.makedirs("dataset/embedding/auto_encoder", exist_ok=True)
+
+    # Save features and labels
+    torch.save(features, "dataset/embedding/auto_encoder/usps_mnist_Feature.pt")
+    torch.save(labels, "dataset/embedding/auto_encoder/usps_mnist_Label.pt")
+
+    print(f"Saved features with shape: {features.shape}")
+    print(f"Saved labels with shape: {labels.shape}")
+    print("USPS MNIST features and labels saved successfully!")
+
+
+def create_mnist_features(
+    batch_size: int = 512,
+):  # Define transforms for USPS MNIST data - simple grayscale conversion and normalization
+    transform = transforms.Compose(
+        [
+            transforms.Resize((32, 32)),
+            transforms.ToTensor(),  # Convert to tensor and normalize to [0,1]
+        ]
+    )
+
+    dataset_path = "dataset/MNIST/Numerals"
+    dataset = datasets.ImageFolder(root=dataset_path, transform=transform)
+    loader = DataLoader(dataset, batch_size=batch_size, shuffle=False, drop_last=True)
+
+    features = []
+    labels = []
+    for imgs, lbls in loader:
+        features.append(imgs)
+        labels.append(lbls)
+
+    # Concatenate all batches
+    features = torch.cat(features, dim=0)
+    labels = torch.cat(labels, dim=0)
+
+    # Create output directory
+    os.makedirs("dataset/embedding/auto_encoder", exist_ok=True)
+
+    # Save features and labels
+    torch.save(features, "dataset/embedding/auto_encoder/usps_mnist_Feature.pt")
+    torch.save(labels, "dataset/embedding/auto_encoder/usps_mnist_Label.pt")
+
+    print(f"Saved features with shape: {features.shape}")
+    print(f"Saved labels with shape: {labels.shape}")
+    print("USPS MNIST features and labels saved successfully!")
+
+
 if __name__ == "__main__":
-    dataset_name = "coil-20"
     backbone_name = Config().backbone.name
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
     # create_coil20_annotation_csv()
 
-    create_features_object(
-        dataset_name=dataset_name, backbone_name=backbone_name, device=device
-    )
+    # create_features_object(
+    #     dataset_name=dataset_name, backbone_name=backbone_name, device=device
+    # )
     # create_mnist_features_object("dataset/MNIST")
+
+    # Example: Create USPS MNIST features
+    # create_usps_mnist_features(
+    #     backbone_name=backbone_name, device=device, batch_size=1024
+    # )
+    create_mnist_ae_features(device=device, batch_size=1024)
+    # create_mnist_features()

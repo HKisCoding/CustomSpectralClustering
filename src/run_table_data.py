@@ -1,3 +1,5 @@
+import os
+
 import pandas as pd
 import torch
 
@@ -8,11 +10,11 @@ from utils.Metrics import run_evaluate_with_labels
 
 config_dict = {
     "device": torch.device("cuda" if torch.cuda.is_available() else "cpu"),
-    "training": {"lr": 0.001, "num_epoch": 100},
+    "training": {"lr": 0.0005, "num_epoch": 100},
     "self_adjust_graph": {
-        "g_dim": 128,
+        "g_dim": 32,
         "gamma": 1,
-        "mu": 1,
+        "mu": 0.1,
         "delta": 0.1,
         "cluster": 10,  # Number of clusters
         "auxillary_loss_kind": "entropy",
@@ -20,12 +22,11 @@ config_dict = {
     },
     "school": {
         "k": 10,
-        "out_feat": 128,
-        "gcn_hid_units": 256,
-        "gcn_out_size": 128,
-        "spectral_architecture": [512, 512, 128],
+        "out_feat": 64,
+        "gcn_architecture": [256, 64],
+        "spectral_architecture": [512, 512, 64],
     },
-    "dataset": {"dataset": "prokaryotic", "batch_size": 256},
+    "dataset": {"dataset": "colon_cancer", "batch_size": 64},
 }
 
 
@@ -75,14 +76,17 @@ def run_self_adjust_graph_net():
             losses.append(loss)
             val_results.append(result)
 
-        loss_df = pd.DataFrame(losses)
-        loss_df.to_csv(
-            f"output\\self_adjust_graph_with_soft_assignment\\{config.dataset.dataset}_{config.training.num_epoch}epochs_loss.csv"
-        )
-        val_df = pd.DataFrame(val_results)
-        val_df.to_csv(
-            f"output\\self_adjust_graph_with_soft_assignment\\{config.dataset.dataset}_{config.training.num_epoch}epochs_val.csv"
-        )
+            loss_df = pd.DataFrame(losses)
+
+            outdir = f"output\\self_adjust_graph_with_soft_assignment\\{config.dataset.dataset}"
+            os.makedirs(outdir, exist_ok=True)
+            loss_df.to_csv(
+                f"{outdir}\\train_time{i + 1}_{config.training.num_epoch}epochs_loss.csv"
+            )
+            val_df = pd.DataFrame(val_results)
+            val_df.to_csv(
+                f"{outdir}\\train_time{i + 1}_{config.training.num_epoch}epochs_val.csv"
+            )
 
 
 def run_validation():
@@ -90,8 +94,6 @@ def run_validation():
     config = Config.from_dict(config_dict)
 
     # Load MSRC-v2 dataset and extract features
-
-    dataset = config.dataset.dataset
 
     dataset = config.dataset.dataset
 
@@ -132,5 +134,6 @@ def run_validation():
 
 
 if __name__ == "__main__":
-    # run_self_adjust_graph_net()
-    run_validation()
+    run_self_adjust_graph_net()
+    # run_validation()
+    # run_validation()

@@ -63,13 +63,22 @@ class BaseTrainer(object):
         padded_valid_dataset = PaddedDataset(valset, self.batch_size)
 
         train_loader = DataLoader(
-            padded_train_dataset, batch_size=self.batch_size, shuffle=True
+            padded_train_dataset,
+            batch_size=self.batch_size,
+            shuffle=True,
+            drop_last=True,
         )
         ortho_loader = DataLoader(
-            padded_train_dataset, batch_size=self.batch_size, shuffle=True
+            padded_train_dataset,
+            batch_size=self.batch_size,
+            shuffle=True,
+            drop_last=True,
         )
         valid_loader = DataLoader(
-            padded_valid_dataset, batch_size=self.batch_size, shuffle=False
+            padded_valid_dataset,
+            batch_size=self.batch_size,
+            shuffle=False,
+            drop_last=True,
         )
         return train_loader, ortho_loader, valid_loader, is_feature
         # train_loader = DataLoader(trainset, batch_size=self.batch_size, shuffle=True)

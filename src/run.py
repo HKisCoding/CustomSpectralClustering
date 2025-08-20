@@ -1,6 +1,14 @@
+import os
+
 import pandas as pd
 import torch
 
+# Import necessary modules for AutoEncoder training
+import torchvision.datasets as datasets
+import torchvision.transforms as transforms
+from torch.utils.data import DataLoader
+
+from src.trainers.AutoEncoderTrainer import AutoEncoderTrainer
 from trainers.SelfAdjustGraphTrainer import SelfAdjustGraphTrainer
 from trainers.SpectralNetTrainer import SpectralNetTrainer
 from utils.Config import Config
@@ -9,12 +17,12 @@ from utils.Metrics import run_evaluate_with_labels
 # Configuration for SelfAdjustGraphTrainer
 config_dict = {
     "device": torch.device("cuda" if torch.cuda.is_available() else "cpu"),
-    "training": {"lr": 0.0005, "num_epoch": 150},
+    "training": {"lr": 0.00075, "num_epoch": 200},
     "self_adjust_graph": {
-        "g_dim": 256,
+        "g_dim": 128,
         "gamma": 1,
-        "mu": 1,
-        "delta": 0.1,
+        "mu": 0.1,
+        "delta": 1,
         "cluster": 10,  # Number of clusters
         "auxillary_loss_kind": "entropy",
         "auxillary_loss_alpha": 0.1,
@@ -23,17 +31,17 @@ config_dict = {
         "k": 10,
         "feat_size": 512,
         "out_feat": 256,
-        "gcn_architecture": [512, 256],
+        "gcn_architecture": [512, 256, 256],
         "spectral_architecture": [1024, 1024, 256],
     },
-    "dataset": {"dataset": "coil-20", "batch_size": 512},
+    "dataset": {"dataset": "usps_mnist_ae", "batch_size": 1024},
     "backbone": {
         "name": "resnet18",
         "pretrained": True,
         "feature_dims": 512,
         "z_dims": 256,
     },
-    "spectral": {"architecture": [1024, 1024, 512], "scale_k": 10},
+    "spectral": {"architecture": [1024, 1024, 256], "scale_k": 10},
 }
 
 
@@ -45,8 +53,8 @@ def run_self_adjust_graph_net():
 
     dataset = config.dataset.dataset
 
-    features = +torch.load(config.dataset.data_path[dataset]["features"])
-    labels = torch.load(config.dataset.data_path[dataset]["labels"])
+    features = torch.load(config.dataset.data_path[dataset]["features"])
+    labels = torch.load(config.dataset.data_path[dataset]["labels"]).squeeze()
 
     n_cluster = len(torch.unique(labels))
 
@@ -55,7 +63,7 @@ def run_self_adjust_graph_net():
     config.school.feat_size = features.shape[1]
     val_results = []
     losses = []
-    for i in range(5):
+    for i in range(1):
         # Create trainer
         loss = 0
         trainer = SelfAdjustGraphTrainer(config)
@@ -76,14 +84,19 @@ def run_self_adjust_graph_net():
             # losses.append(loss)
             val_results.append(result)
 
-        loss_df = pd.DataFrame(loss)
-        loss_df.to_csv(
-            f"output\\self_adjust_graph_with_soft_assignment\\{config.dataset.dataset}\\train_time{i + 1}_{config.training.num_epoch}epochs_loss.csv"
-        )
-        val_df = pd.DataFrame(val_results)
-        val_df.to_csv(
-            f"output\\self_adjust_graph_with_soft_assignment\\{config.dataset.dataset}\\train_time{i + 1}_{config.training.num_epoch}epochs_val.csv"
-        )
+        # output_path = (
+        #     f"output\\self_adjust_graph_with_soft_assignment\\{config.dataset.dataset}"
+        # )
+        # os.makedirs(output_path, exist_ok=True)
+
+        # loss_df = pd.DataFrame(loss)
+        # loss_df.to_csv(
+        #     f"{output_path}\\train_time{i + 1}_{config.training.num_epoch}epochs_loss.csv"
+        # )
+        # val_df = pd.DataFrame(val_results)
+        # val_df.to_csv(
+        #     f"{output_path}\\train_time{i + 1}_{config.training.num_epoch}epochs_val.csv"
+        # )
 
 
 def run_spectral_net():
@@ -95,7 +108,7 @@ def run_spectral_net():
     dataset = config.dataset.dataset
 
     features = torch.load(config.dataset.data_path[dataset]["features"])
-    labels = torch.load(config.dataset.data_path[dataset]["labels"])
+    labels = torch.load(config.dataset.data_path[dataset]["labels"]).squeeze()
 
     n_cluster = len(torch.unique(labels))
 
@@ -105,7 +118,7 @@ def run_spectral_net():
 
     val_results = []
     losses = []
-    for i in range(5):
+    for i in range(1):
         # Create trainer
         trainer = SpectralNetTrainer(config, device=config.device, is_sparse=False)
         # Train the model
@@ -119,13 +132,15 @@ def run_spectral_net():
         losses.append(loss)
         val_results.append(result)
 
+        output_path = f"output\\spectralnet_siamese_net\\{config.dataset.dataset}"
+        os.makedirs(output_path, exist_ok=True)
         loss_df = pd.DataFrame(losses)
         loss_df.to_csv(
-            f"output\\spectralnet\\{config.dataset.dataset}\\train_time{i + 1}_{config.training.num_epoch}epochs_loss.csv"
+            f"{output_path}\\train_time{i + 1}_{config.training.num_epoch}epochs_loss.csv"
         )
         val_df = pd.DataFrame(val_results)
         val_df.to_csv(
-            f"output\\spectralnet\\{config.dataset.dataset}\\train_time{i + 1}_{config.training.num_epoch}epochs_val.csv"
+            f"{output_path}\\train_time{i + 1}_{config.training.num_epoch}epochs_val.csv"
         )
 
 
@@ -138,7 +153,7 @@ def run_validation():
     dataset = config.dataset.dataset
 
     features = torch.load(config.dataset.data_path[dataset]["features"])
-    labels = torch.load(config.dataset.data_path[dataset]["labels"])
+    labels = torch.load(config.dataset.data_path[dataset]["labels"]).squeeze()
 
     n_cluster = len(torch.unique(labels))
 
@@ -147,12 +162,12 @@ def run_validation():
     config.school.feat_size = features.shape[1]
 
     val_results = []
-    for i in range(5):
+    for i in range(1):
         trainer = SelfAdjustGraphTrainer(config)
         cluster_assignment = trainer.predict(
             X=features,
             n_clusters=n_cluster,
-            use_weight="weights\\self_adjust_graph\\best_spectral_loss.pt",
+            use_weight=f"weights\\self_adjust_graph_with_soft_assignment\\{config.dataset.dataset}\\best_spectral_loss.pt",
         )
         y_target = labels.detach().cpu().numpy()
         result = run_evaluate_with_labels(
@@ -166,7 +181,72 @@ def run_validation():
     # )
 
 
+def run_training_auto_encoder():
+    config = Config.from_dict(config_dict)
+    autoencoder_config = config.auto_encoder
+
+    device = config.device
+    print(f"Using device: {device}")
+
+    # Define transforms for USPS MNIST data - simple grayscale conversion and normalization
+    transform = transforms.Compose(
+        [
+            transforms.Grayscale(num_output_channels=1),  # Convert to grayscale
+            transforms.Resize((32, 32)),
+            transforms.ToTensor(),  # Convert to tensor and normalize to [0,1]
+            transforms.Normalize((0.5,), (0.5,)),  # Normalize to [-1,1]
+        ]
+    )
+
+    # Load USPS MNIST dataset from dataset/MNIST/Numerals
+    dataset_path = "dataset/MNIST/Numerals"
+    dataset = datasets.ImageFolder(root=dataset_path, transform=transform)
+
+    # Create data loader to load all data at once
+    data_loader = DataLoader(
+        dataset,
+        batch_size=autoencoder_config.batch_size,
+        shuffle=False,
+        drop_last=True,
+    )
+
+    # Create output directory for weights
+    os.makedirs(os.path.dirname(autoencoder_config.weight_path), exist_ok=True)
+
+    # Create and train autoencoder
+    ae_trainer = AutoEncoderTrainer(autoencoder_config, device)
+    print("Starting AutoEncoder training...")
+    ae_trainer.train(data_loader, None)
+
+    features = []
+    labels = []
+    with torch.no_grad():
+        for imgs, lbls in data_loader:
+            imgs = imgs.to(device)
+            feats = ae_trainer.embed(imgs)
+            features.append(feats.cpu())
+            labels.append(lbls.cpu())
+
+    # Concatenate all batches
+    features = torch.cat(features, dim=0)
+    labels = torch.cat(labels, dim=0)
+
+    # Create output directory
+    os.makedirs("dataset/embedding/auto_encoder", exist_ok=True)
+
+    # Save features and labels
+    torch.save(features, "dataset/embedding/auto_encoder/usps_mnist_Feature.pt")
+    torch.save(labels, "dataset/embedding/auto_encoder/usps_mnist_Label.pt")
+
+    print(f"Saved features with shape: {features.shape}")
+    print(f"Saved labels with shape: {labels.shape}")
+    print("USPS MNIST features and labels saved successfully!")
+
+    print("AutoEncoder training completed!")
+
+
 if __name__ == "__main__":
     # run_spectral_net()
     run_self_adjust_graph_net()
     # run_validation()
+    # run_training_auto_encoder()

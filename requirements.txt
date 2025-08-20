@@ -59,19 +59,18 @@ sphinxcontrib-htmlhelp==2.0.1
 sphinxcontrib-jsmath==1.0.1
 sphinxcontrib-qthelp==1.0.3
 sphinxcontrib-serializinghtml==1.1.5
-sympy==1.11.1
 threadpoolctl==3.2.0
 tomli==2.0.1
 
---find-links https://download.pytorch.org/whl/torch_stable.html
-torch==2.0.1+cpu
-torchaudio==2.0.2+cpu
-torchvision==0.15.2+cpu
+# --find-links https://download.pytorch.org/whl/torch_stable.html
+# torch==2.0.1+cpu
+# torchaudio==2.0.2+cpu
+# torchvision==0.15.2+cpu
 
 tqdm==4.65.0
 typer==0.9.0
-typing-extensions==4.7.1
 tzdata==2023.3
 urllib3==1.26.13
 xlrd==1.2.0
 zipp==3.16.2
+deeplake==3.8.0

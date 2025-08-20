@@ -227,93 +227,90 @@ class SelfAdjustGraphTrainer(BaseTrainer):
 
                 A, alpha, beta, idx = self.compute_graph_parameters(X_grad)
 
-                with torch.autograd.set_detect_anomaly(True):
-                    embs_hom, embs_graph, A_updated, Y = self.model(
-                        X_grad, X_orth, idx, alpha, beta, A
-                    )
+                embs_hom, embs_graph, A_updated, Y = self.model(
+                    X_grad, X_orth, idx, alpha, beta, A
+                )
 
-                    cluster_centers = get_cluster_centroids(
-                        Y.detach().cpu().numpy(), self.cluster
-                    )
-                    cluster_centers = torch.tensor(cluster_centers, device=Y.device)
-                    Q = self.compute_soft_assignments(Y, cluster_centers)
+                cluster_centers = get_cluster_centroids(
+                    Y.detach().cpu().numpy(), self.cluster
+                )
+                cluster_centers = torch.tensor(cluster_centers, device=Y.device)
+                Q = self.compute_soft_assignments(Y, cluster_centers)
 
-                    # # Replace NaN values in model parameters
-                    # self.replace_nan_in_model()
+                # # Replace NaN values in model parameters
+                # self.replace_nan_in_model()
 
-                    spectral_loss = self.criterion(A_updated, Y)
+                spectral_loss = self.criterion(A_updated, Y)
 
-                    p_i = Q.sum(0).view(-1)
-                    p_i = (p_i + INF) / (p_i.sum() + INF)
-                    p_i = torch.abs(p_i)
-                    # The second term in Eq. (13): entropy loss
-                    entrpoy_loss = (
-                        math.log(p_i.size(0) + INF)
-                        + ((p_i + INF) * torch.log(p_i + INF)).sum()
-                    )
-                    spectral_loss = spectral_loss + self.gamma * entrpoy_loss
+                p_i = Q.sum(0).view(-1)
+                p_i = (p_i + INF) / (p_i.sum() + INF)
+                p_i = torch.abs(p_i)
+                # The second term in Eq. (13): entropy loss
+                entrpoy_loss = (
+                    math.log(p_i.size(0) + INF)
+                    + ((p_i + INF) * torch.log(p_i + INF)).sum()
+                )
+                spectral_loss = spectral_loss + self.gamma * entrpoy_loss
 
-                    embs_graph = self.embedding(embs_graph)
-                    embs_hom = self.embedding(embs_hom)
+                embs_graph = self.embedding(embs_graph)
+                embs_hom = self.embedding(embs_hom)
 
-                    #######################################################################
-                    # The first term in Eq. (15): invariance loss
-                    inter_c = embs_hom.T @ embs_graph.detach()
-                    inter_c = F.normalize(inter_c, p=2, dim=1)
-                    loss_inv = -torch.diagonal(inter_c).sum()
+                #######################################################################
+                # The first term in Eq. (15): invariance loss
+                inter_c = embs_hom.T @ embs_graph.detach()
+                inter_c = F.normalize(inter_c, p=2, dim=1)
+                loss_inv = -torch.diagonal(inter_c).sum()
 
-                    # The second term in Eq. (15): uniformity loss
-                    # intra_c = (embs_hom).T @ (embs_hom).contiguous()
-                    # intra_c = torch.exp(F.normalize(intra_c, p=2, dim=1)).sum()
-                    # loss_uni = torch.log(intra_c).mean()
+                # The second term in Eq. (15): uniformity loss
+                # intra_c = (embs_hom).T @ (embs_hom).contiguous()
+                # intra_c = torch.exp(F.normalize(intra_c, p=2, dim=1)).sum()
+                # loss_uni = torch.log(intra_c).mean()
 
-                    # intra_c_2 = (embs_graph).T @ (embs_graph).contiguous()
-                    # intra_c_2 = torch.exp(F.normalize(intra_c_2, p=2, dim=1)).sum()
-                    # loss_uni += torch.log(intra_c_2).mean()
-                    intra_c = (embs_hom).T @ (embs_hom).contiguous() + (
-                        embs_graph
-                    ).T @ (embs_graph).contiguous()
-                    intra_c = torch.exp(F.normalize(intra_c, p=2, dim=1)).sum()
-                    loss_uni = torch.log(intra_c)
-                    loss_consistency = loss_inv + self.mu * loss_uni
+                # intra_c_2 = (embs_graph).T @ (embs_graph).contiguous()
+                # intra_c_2 = torch.exp(F.normalize(intra_c_2, p=2, dim=1)).sum()
+                # loss_uni += torch.log(intra_c_2).mean()
+                intra_c = (embs_hom).T @ (embs_hom).contiguous() + (embs_graph).T @ (
+                    embs_graph
+                ).contiguous()
+                intra_c = torch.exp(F.normalize(intra_c, p=2, dim=1)).sum()
+                loss_uni = torch.log(intra_c)
+                loss_consistency = loss_inv + self.mu * loss_uni
 
-                    # The second term in Eq. (13): cluster-level loss
-                    Y_hat = torch.argmax(Q, dim=1)
-                    avg_pooling_cluster_center = torch.stack(
-                        [
-                            torch.mean(embs_hom[Y_hat == i], dim=0)
-                            for i in range(self.cluster)
-                        ]
-                    )  # Shape: (num_clusters, embedding_dim)
-                    # Gather positive cluster centers
-                    # positive = avg_pooling_cluster_center[Y_hat]
-                    # # The first term in Eq. (11)
-                    # inter_c = positive.T @ embs_graph
-                    # inter_c = F.normalize(inter_c, p=2, dim=1)
-                    # loss_spe_inv = -torch.diagonal(inter_c).sum()
+                # The second term in Eq. (13): cluster-level loss
+                Y_hat = torch.argmax(Q, dim=1)
+                avg_pooling_cluster_center = torch.stack(
+                    [
+                        torch.mean(embs_hom[Y_hat == i], dim=0)
+                        for i in range(self.cluster)
+                    ]
+                )  # Shape: (num_clusters, embedding_dim)
+                # Gather positive cluster centers
+                # positive = avg_pooling_cluster_center[Y_hat]
+                # # The first term in Eq. (11)
+                # inter_c = positive.T @ embs_graph
+                # inter_c = F.normalize(inter_c, p=2, dim=1)
+                # loss_spe_inv = -torch.diagonal(inter_c).sum()
 
-                    loss_spe_inv = self.kl_loss(embs_graph, avg_pooling_cluster_center)
+                loss_spe_inv = self.kl_loss(embs_graph, avg_pooling_cluster_center)
 
-                    loss = (
-                        spectral_loss
-                        + self.mu * loss_consistency
-                        + self.delta * (loss_spe_inv)
-                    )
+                loss = (
+                    spectral_loss
+                    + self.mu * loss_consistency
+                    + self.delta * (loss_spe_inv)
+                )
 
-                    # Backward pass
-                    loss.backward()
+                # Backward pass
+                loss.backward()
 
-                    # Add gradient clipping
-                    torch.nn.utils.clip_grad_norm_(
-                        self.model.parameters(), max_norm=1.0
-                    )
+                # Add gradient clipping
+                torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
 
-                    self.optimizer.step()
+                self.optimizer.step()
 
-                    train_loss += loss.item()
-                    epoch_spectral_loss += spectral_loss.item()
-                    epoch_node_consistency_loss += loss_consistency.item()
-                    epoch_cluster_loss += loss_spe_inv.item()
+                train_loss += loss.item()
+                epoch_spectral_loss += spectral_loss.item()
+                epoch_node_consistency_loss += loss_consistency.item()
+                epoch_cluster_loss += loss_spe_inv.item()
                 # Update progress bar with current metrics
                 pbar.set_postfix(
                     {
@@ -355,6 +352,14 @@ class SelfAdjustGraphTrainer(BaseTrainer):
 
             if train_loss < best_train_loss:
                 best_train_loss = train_loss
+                os.makedirs(
+                    os.path.join(
+                        self.weight_path,
+                        "self_adjust_graph_with_soft_assignment",
+                        self.config.dataset.dataset,
+                    ),
+                    exist_ok=True,
+                )
                 torch.save(
                     {
                         "epoch": epoch,
@@ -366,8 +371,8 @@ class SelfAdjustGraphTrainer(BaseTrainer):
                     },
                     os.path.join(
                         self.weight_path,
-                        "weights",
-                        "self_adjust_graph",
+                        "self_adjust_graph_with_soft_assignment",
+                        self.config.dataset.dataset,
                         "best_model.pt",
                     ),
                 )
@@ -377,6 +382,14 @@ class SelfAdjustGraphTrainer(BaseTrainer):
 
             if epoch_spectral_loss < best_spectral_loss:
                 best_spectral_loss = epoch_spectral_loss
+                os.makedirs(
+                    os.path.join(
+                        self.weight_path,
+                        "self_adjust_graph_with_soft_assignment",
+                        self.config.dataset.dataset,
+                    ),
+                    exist_ok=True,
+                )
                 torch.save(
                     {
                         "epoch": epoch,
@@ -388,8 +401,8 @@ class SelfAdjustGraphTrainer(BaseTrainer):
                     },
                     os.path.join(
                         self.weight_path,
-                        "weights",
-                        "self_adjust_graph",
+                        "self_adjust_graph_with_soft_assignment",
+                        self.config.dataset.dataset,
                         "best_spectral_loss.pt",
                     ),
                 )
