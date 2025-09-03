@@ -350,65 +350,65 @@ class SelfAdjustGraphTrainer(BaseTrainer):
                     f"Time: {epoch_time:.2f}s"
                 )
 
-            if train_loss < best_train_loss:
-                best_train_loss = train_loss
-                os.makedirs(
-                    os.path.join(
-                        self.weight_path,
-                        "self_adjust_graph_with_soft_assignment",
-                        self.config.dataset.dataset,
-                    ),
-                    exist_ok=True,
-                )
-                torch.save(
-                    {
-                        "epoch": epoch,
-                        "model_state_dict": self.model.state_dict(),
-                        "optimizer_state_dict": self.optimizer.state_dict(),
-                        "train_loss": train_loss,
-                        "val_loss": val_loss,
-                        "orthonorm_weights": self.model.spectral_net.orthonorm_weights,
-                    },
-                    os.path.join(
-                        self.weight_path,
-                        "self_adjust_graph_with_soft_assignment",
-                        self.config.dataset.dataset,
-                        "best_model.pt",
-                    ),
-                )
-                self.logger.info(
-                    f"Saved new best model with train loss: {train_loss:.4f}"
-                )
+            # if train_loss < best_train_loss:
+            #     best_train_loss = train_loss
+            #     os.makedirs(
+            #         os.path.join(
+            #             self.weight_path,
+            #             "self_adjust_graph_with_soft_assignment",
+            #             self.config.dataset.dataset,
+            #         ),
+            #         exist_ok=True,
+            #     )
+            #     torch.save(
+            #         {
+            #             "epoch": epoch,
+            #             "model_state_dict": self.model.state_dict(),
+            #             "optimizer_state_dict": self.optimizer.state_dict(),
+            #             "train_loss": train_loss,
+            #             "val_loss": val_loss,
+            #             "orthonorm_weights": self.model.spectral_net.orthonorm_weights,
+            #         },
+            #         os.path.join(
+            #             self.weight_path,
+            #             "self_adjust_graph_with_soft_assignment",
+            #             self.config.dataset.dataset,
+            #             "best_model.pt",
+            #         ),
+            #     )
+            #     self.logger.info(
+            #         f"Saved new best model with train loss: {train_loss:.4f}"
+            #     )
 
-            if epoch_spectral_loss < best_spectral_loss:
-                best_spectral_loss = epoch_spectral_loss
-                os.makedirs(
-                    os.path.join(
-                        self.weight_path,
-                        "self_adjust_graph_with_soft_assignment",
-                        self.config.dataset.dataset,
-                    ),
-                    exist_ok=True,
-                )
-                torch.save(
-                    {
-                        "epoch": epoch,
-                        "model_state_dict": self.model.state_dict(),
-                        "optimizer_state_dict": self.optimizer.state_dict(),
-                        "train_loss": train_loss,
-                        "val_loss": val_loss,
-                        "orthonorm_weights": self.model.spectral_net.orthonorm_weights,
-                    },
-                    os.path.join(
-                        self.weight_path,
-                        "self_adjust_graph_with_soft_assignment",
-                        self.config.dataset.dataset,
-                        "best_spectral_loss.pt",
-                    ),
-                )
-                self.logger.info(
-                    f"Saved new best model with spectral loss: {epoch_spectral_loss:.4f}"
-                )
+            # if epoch_spectral_loss < best_spectral_loss:
+            #     best_spectral_loss = epoch_spectral_loss
+            #     os.makedirs(
+            #         os.path.join(
+            #             self.weight_path,
+            #             "self_adjust_graph_with_soft_assignment",
+            #             self.config.dataset.dataset,
+            #         ),
+            #         exist_ok=True,
+            #     )
+            #     torch.save(
+            #         {
+            #             "epoch": epoch,
+            #             "model_state_dict": self.model.state_dict(),
+            #             "optimizer_state_dict": self.optimizer.state_dict(),
+            #             "train_loss": train_loss,
+            #             "val_loss": val_loss,
+            #             "orthonorm_weights": self.model.spectral_net.orthonorm_weights,
+            #         },
+            #         os.path.join(
+            #             self.weight_path,
+            #             "self_adjust_graph_with_soft_assignment",
+            #             self.config.dataset.dataset,
+            #             "best_spectral_loss.pt",
+            #         ),
+            #     )
+            #     self.logger.info(
+            #         f"Saved new best model with spectral loss: {epoch_spectral_loss:.4f}"
+            #     )
 
             result = {
                 "train_loss": train_loss,

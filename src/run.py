@@ -17,12 +17,12 @@ from utils.Metrics import run_evaluate_with_labels
 # Configuration for SelfAdjustGraphTrainer
 config_dict = {
     "device": torch.device("cuda" if torch.cuda.is_available() else "cpu"),
-    "training": {"lr": 0.00075, "num_epoch": 200},
+    "training": {"lr": 0.0005, "num_epoch": 100},
     "self_adjust_graph": {
         "g_dim": 128,
         "gamma": 1,
-        "mu": 0.1,
-        "delta": 1,
+        "mu": 1,
+        "delta": 0.1,
         "cluster": 10,  # Number of clusters
         "auxillary_loss_kind": "entropy",
         "auxillary_loss_alpha": 0.1,
@@ -34,7 +34,7 @@ config_dict = {
         "gcn_architecture": [512, 256, 256],
         "spectral_architecture": [1024, 1024, 256],
     },
-    "dataset": {"dataset": "usps_mnist_ae", "batch_size": 1024},
+    "dataset": {"dataset": "mnist", "batch_size": 2000},
     "backbone": {
         "name": "resnet18",
         "pretrained": True,
@@ -132,16 +132,16 @@ def run_spectral_net():
         losses.append(loss)
         val_results.append(result)
 
-        output_path = f"output\\spectralnet_siamese_net\\{config.dataset.dataset}"
-        os.makedirs(output_path, exist_ok=True)
-        loss_df = pd.DataFrame(losses)
-        loss_df.to_csv(
-            f"{output_path}\\train_time{i + 1}_{config.training.num_epoch}epochs_loss.csv"
-        )
-        val_df = pd.DataFrame(val_results)
-        val_df.to_csv(
-            f"{output_path}\\train_time{i + 1}_{config.training.num_epoch}epochs_val.csv"
-        )
+        # output_path = f"output\\spectralnet_siamese_net\\{config.dataset.dataset}"
+        # os.makedirs(output_path, exist_ok=True)
+        # loss_df = pd.DataFrame(losses)
+        # loss_df.to_csv(
+        #     f"{output_path}\\train_time{i + 1}_{config.training.num_epoch}epochs_loss.csv"
+        # )
+        # val_df = pd.DataFrame(val_results)
+        # val_df.to_csv(
+        #     f"{output_path}\\train_time{i + 1}_{config.training.num_epoch}epochs_val.csv"
+        # )
 
 
 def run_validation():
@@ -246,7 +246,7 @@ def run_training_auto_encoder():
 
 
 if __name__ == "__main__":
-    # run_spectral_net()
-    run_self_adjust_graph_net()
+    run_spectral_net()
+    # run_self_adjust_graph_net()
     # run_validation()
     # run_training_auto_encoder()

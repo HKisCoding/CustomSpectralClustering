@@ -19,14 +19,14 @@ class AutoEncoderTrainer:
         self.lr_decay = config.lr_decay
         self.patience = config.patience
         self.epochs = config.epochs
-        self.weights_path = config.weight_path
+        self.weights_path = ""
         self.min_lr = config.min_lr
 
     def train(self, train_loader: DataLoader, valid_loader: DataLoader | None):
         self.criterion = nn.MSELoss()
 
         # Get input dimension from first batch
-        first_batch = next(iter(train_loader))[0]
+        first_batch = next(iter(train_loader))
         first_batch = first_batch.view(first_batch.size(0), -1)
         input_dim = first_batch.shape[1]
 
@@ -40,15 +40,16 @@ class AutoEncoderTrainer:
             self.optimizer, mode="min", factor=self.lr_decay, patience=self.patience
         )
 
-        if os.path.exists(self.weights_path):
-            self.ae_net.load_state_dict(torch.load(self.weights_path))
-            return self.ae_net
+        if self.weights_path:
+            if os.path.exists(self.weights_path):
+                self.ae_net.load_state_dict(torch.load(self.weights_path))
+                return self.ae_net
 
         print("Training Autoencoder:")
         t = trange(self.epochs, leave=True)
         for epoch in t:
             train_loss = 0.0
-            for batch_x, _ in train_loader:
+            for batch_x in train_loader:
                 batch_x = batch_x.to(self.device)
                 batch_x = batch_x.view(batch_x.size(0), -1)
                 self.optimizer.zero_grad()
@@ -73,8 +74,6 @@ class AutoEncoderTrainer:
                 "Train Loss: {:.7f}, LR: {:.6f}".format(train_loss, current_lr)
             )
             t.refresh()
-
-        torch.save(self.ae_net.state_dict(), self.weights_path)
 
     def validate(self, valid_loader: DataLoader) -> float:
         self.ae_net.eval()

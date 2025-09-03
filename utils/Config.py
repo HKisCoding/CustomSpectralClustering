@@ -21,8 +21,8 @@ class DatasetConfig(BaseConfig):
     data_path: dict = field(
         default_factory=lambda: {
             "mnist": {
-                "features": "dataset/MNIST/processed/mnist_features.pt",
-                "labels": "dataset/MNIST/processed/mnist_labels.pt",
+                "features": "dataset/embedding/auto_encoder/mnist_raw_Feature.pt",
+                "labels": "dataset/embedding/auto_encoder/mnist_raw_Label.pt",
             },
             "Caltech_101": {
                 "features": "dataset/embedding/resnet/Caltech_101_Feature.pt",
@@ -153,8 +153,8 @@ class AutoEncoderConfig(BaseConfig):
     epochs: int = 50
     lr_decay: float = 0.1
     patience: int = 10
-    architecture: List[int] = field(default_factory=lambda: [512, 512, 2048, 128])
-    batch_size: int = 1024
+    architecture: List[int] = field(default_factory=lambda: [512, 512, 2048, 10])
+    batch_size: int = 256
     weight_path: str = "./output/weights/auto_encoder/usps_mnist.pth"
 
 
