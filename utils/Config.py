@@ -159,6 +159,26 @@ class AutoEncoderConfig(BaseConfig):
 
 
 @dataclass
+class DSCConfig(BaseConfig):
+    """DSC model related settings"""
+
+    hidden_units: int = 64
+    batch_size: int = 256
+    n_neighbors: int = 10
+    scale_k: int = 10
+    n_iter: int = 20
+
+
+@dataclass
+class AEConvConfig(BaseConfig):
+    """AEConv model related settings"""
+
+    batch_size: int = 256
+    weight_path: str = "ae_conv/ae_conv.pth"
+    epochs: int = 100
+
+
+@dataclass
 class Config(BaseConfig):
     """Main configuration class that combines all config groups"""
 

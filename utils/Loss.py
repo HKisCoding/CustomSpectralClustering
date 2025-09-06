@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 
 class SpectralNetLoss(nn.Module):
@@ -251,4 +252,26 @@ class KLClusteringLoss(nn.Module):
         # Compute KL divergence loss
         loss = self.kl_divergence(P, Q)
 
+        return loss
+
+
+class MSELoss(nn.Module):
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+
+    def forward(self, y_true_batch, y_pred_batch, hidden_units):
+        """
+        Total loss function of DSC
+
+        Args:
+            y_true_batch: target matrix Y (torch tensor)
+            y_pred_batch: outputs of the encoder (torch tensor)
+            hidden_units: number of hidden units
+
+        Returns:
+            loss: MSE loss between target and prediction
+        """
+        # Extract only the embedding part (first hidden_units dimensions)
+        y_pred_batch = y_pred_batch[:, :hidden_units]
+        loss = F.mse_loss(y_true_batch, y_pred_batch)
         return loss

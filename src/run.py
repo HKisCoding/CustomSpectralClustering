@@ -17,12 +17,12 @@ from utils.Metrics import run_evaluate_with_labels
 # Configuration for SelfAdjustGraphTrainer
 config_dict = {
     "device": torch.device("cuda" if torch.cuda.is_available() else "cpu"),
-    "training": {"lr": 0.0005, "num_epoch": 100},
+    "training": {"lr": 0.001, "num_epoch": 100},
     "self_adjust_graph": {
-        "g_dim": 128,
+        "g_dim": 32,
         "gamma": 1,
-        "mu": 1,
-        "delta": 0.1,
+        "mu": 0.1,
+        "delta": 1,
         "cluster": 10,  # Number of clusters
         "auxillary_loss_kind": "entropy",
         "auxillary_loss_alpha": 0.1,
@@ -30,9 +30,9 @@ config_dict = {
     "school": {
         "k": 10,
         "feat_size": 512,
-        "out_feat": 256,
-        "gcn_architecture": [512, 256, 256],
-        "spectral_architecture": [1024, 1024, 256],
+        "out_feat": 512,
+        "gcn_architecture": [1024, 512],
+        "spectral_architecture": [1024, 1024, 512],
     },
     "dataset": {"dataset": "mnist", "batch_size": 2000},
     "backbone": {
@@ -41,7 +41,7 @@ config_dict = {
         "feature_dims": 512,
         "z_dims": 256,
     },
-    "spectral": {"architecture": [1024, 1024, 256], "scale_k": 10},
+    "spectral": {"architecture": [1024, 1024, 512], "scale_k": 10},
 }
 
 
@@ -63,7 +63,7 @@ def run_self_adjust_graph_net():
     config.school.feat_size = features.shape[1]
     val_results = []
     losses = []
-    for i in range(1):
+    for i in range(5):
         # Create trainer
         loss = 0
         trainer = SelfAdjustGraphTrainer(config)
@@ -81,21 +81,41 @@ def run_self_adjust_graph_net():
             result = run_evaluate_with_labels(
                 cluster_assignments=cluster_assignment, y=y_target, n_clusters=n_cluster
             )
-            # losses.append(loss)
+            losses.append(loss)
             val_results.append(result)
 
-        # output_path = (
-        #     f"output\\self_adjust_graph_with_soft_assignment\\{config.dataset.dataset}"
-        # )
-        # os.makedirs(output_path, exist_ok=True)
+        output_path = (
+            f"output\\self_adjust_graph_with_soft_assignment\\{config.dataset.dataset}"
+        )
+        os.makedirs(output_path, exist_ok=True)
 
-        # loss_df = pd.DataFrame(loss)
-        # loss_df.to_csv(
-        #     f"{output_path}\\train_time{i + 1}_{config.training.num_epoch}epochs_loss.csv"
+        loss_df = pd.DataFrame(losses)
+        loss_df.to_csv(
+            f"{output_path}\\traintime{i + 1}_{config.training.num_epoch}epochs_loss.csv"
+        )
+        val_df = pd.DataFrame(val_results)
+        val_df.to_csv(
+            f"{output_path}\\traintime{i + 1}_{config.training.num_epoch}epochs_val.csv"
+        )
+
+        # os.makedirs(
+        #     os.path.join(
+        #         trainer.weight_path,
+        #         config.dataset.dataset,
+        #     ),
+        #     exist_ok=True,
         # )
-        # val_df = pd.DataFrame(val_results)
-        # val_df.to_csv(
-        #     f"{output_path}\\train_time{i + 1}_{config.training.num_epoch}epochs_val.csv"
+        # torch.save(
+        #     {
+        #         "model_state_dict": trainer.model.state_dict(),
+        #         "optimizer_state_dict": trainer.optimizer.state_dict(),
+        #         "orthonorm_weights": trainer.model.spectral_net.orthonorm_weights,
+        #     },
+        #     os.path.join(
+        #         trainer.weight_path,
+        #         config.dataset.dataset,
+        #         "self_adjust_graph_with_soft_assignment.pt",
+        #     ),
         # )
 
 
@@ -118,7 +138,7 @@ def run_spectral_net():
 
     val_results = []
     losses = []
-    for i in range(1):
+    for i in range(5):
         # Create trainer
         trainer = SpectralNetTrainer(config, device=config.device, is_sparse=False)
         # Train the model
@@ -132,16 +152,17 @@ def run_spectral_net():
         losses.append(loss)
         val_results.append(result)
 
-        # output_path = f"output\\spectralnet_siamese_net\\{config.dataset.dataset}"
-        # os.makedirs(output_path, exist_ok=True)
-        # loss_df = pd.DataFrame(losses)
-        # loss_df.to_csv(
-        #     f"{output_path}\\train_time{i + 1}_{config.training.num_epoch}epochs_loss.csv"
-        # )
-        # val_df = pd.DataFrame(val_results)
-        # val_df.to_csv(
-        #     f"{output_path}\\train_time{i + 1}_{config.training.num_epoch}epochs_val.csv"
-        # )
+        output_path = f"output\\spectralnet\\{config.dataset.dataset}"
+        os.makedirs(output_path, exist_ok=True)
+
+        loss_df = pd.DataFrame(losses)
+        loss_df.to_csv(
+            f"{output_path}\\traintime{i + 1}_{config.training.num_epoch}epochs_loss.csv"
+        )
+        val_df = pd.DataFrame(val_results)
+        val_df.to_csv(
+            f"{output_path}\\traintime{i + 1}_{config.training.num_epoch}epochs_val.csv"
+        )
 
 
 def run_validation():
@@ -162,12 +183,12 @@ def run_validation():
     config.school.feat_size = features.shape[1]
 
     val_results = []
-    for i in range(1):
+    for i in range(5):
         trainer = SelfAdjustGraphTrainer(config)
         cluster_assignment = trainer.predict(
             X=features,
             n_clusters=n_cluster,
-            use_weight=f"weights\\self_adjust_graph_with_soft_assignment\\{config.dataset.dataset}\\best_spectral_loss.pt",
+            use_weight=f"{config.dataset.dataset}/self_adjust_graph_with_soft_assignment.pt",
         )
         y_target = labels.detach().cpu().numpy()
         result = run_evaluate_with_labels(

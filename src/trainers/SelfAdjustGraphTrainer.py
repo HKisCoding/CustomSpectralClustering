@@ -451,9 +451,6 @@ class SelfAdjustGraphTrainer(BaseTrainer):
                 self.model.spectral_net.orthonorm_weights = checkpoint[
                     "orthonorm_weights"
                 ]
-                self.logger.info(
-                    f"Loaded best model from epoch {checkpoint['epoch']} with loss {checkpoint['train_loss']:.4f}"
-                )
             else:
                 self.logger.warning("No best model found, using current model state")
 

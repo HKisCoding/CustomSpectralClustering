@@ -299,6 +299,6 @@ def get_clusters_by_kmeans(embeddings: np.ndarray, n_clusters: int) -> np.ndarra
 def get_cluster_centroids(embeddings: np.ndarray, n_clusters: int) -> np.ndarray:
     from sklearn.cluster import KMeans
 
-    kmeans = KMeans(n_clusters=n_clusters, n_init=10).fit(embeddings)
+    kmeans = KMeans(n_clusters=n_clusters, n_init=20).fit(embeddings)
     centroids = kmeans.cluster_centers_
     return centroids
