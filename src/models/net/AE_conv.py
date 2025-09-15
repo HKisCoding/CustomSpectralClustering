@@ -1,6 +1,5 @@
 import os
 
-import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -23,7 +22,7 @@ class ConvAutoencoder(nn.Module):
         # Encoder layers
         filters = [32, 64, 128, hidden_units]
         self.conv1 = nn.Conv2d(
-            input_shape[2], filters[0], kernel_size=5, stride=2, padding=2
+            input_shape[1], filters[0], kernel_size=5, stride=2, padding=2
         )
         self.conv2 = nn.Conv2d(
             filters[0], filters[1], kernel_size=5, stride=2, padding=2
@@ -40,8 +39,9 @@ class ConvAutoencoder(nn.Module):
 
         # Calculate the flattened size after conv layers
         # This needs to be computed based on the actual input dimensions
+        # PyTorch conv layers expect input in format (batch, channels, height, width)
         with torch.no_grad():
-            dummy_input = torch.zeros(1, input_shape[2], input_shape[0], input_shape[1])
+            dummy_input = torch.zeros(1, input_shape[1], input_shape[2], input_shape[3])
             x = F.relu(self.conv1(dummy_input))
             x = F.relu(self.conv2(x))
             x = F.relu(self.conv3(x))
@@ -78,7 +78,7 @@ class ConvAutoencoder(nn.Module):
         )
         self.deconv3 = nn.ConvTranspose2d(
             filters[0],
-            input_shape[2],
+            self.input_shape[1],
             kernel_size=5,
             stride=2,
             padding=2,
@@ -86,6 +86,11 @@ class ConvAutoencoder(nn.Module):
         )
 
     def forward(self, x):
+        # Input x has shape (batch_size, width, height)
+        # Add channel dimension to make it (batch_size, channels, height, width) for conv layers
+        if len(x.shape) == 3:
+            x = x.unsqueeze(1)  # Add channel dimension: (batch_size, 1, height, width)
+
         # Encoder
         x = F.relu(self.conv1(x))
         x = F.relu(self.conv2(x))
@@ -106,6 +111,11 @@ class ConvAutoencoder(nn.Module):
         x_decode = F.relu(self.deconv2(x_decode))
         x_decode = self.deconv3(x_decode)  # No activation on final layer
 
+        # Remove channel dimension from decoded output to match input shape
+        # x_decode shape: (batch_size, channels, height, width) -> (batch_size, height, width)
+        if x_decode.size(1) == 1:  # If single channel
+            x_decode = x_decode.squeeze(1)
+
         # Flatten reconstructed output
         x_decode_flat = x_decode.view(x_decode.size(0), -1)
 
@@ -115,7 +125,7 @@ class ConvAutoencoder(nn.Module):
         return output, h_norm, x_decode
 
 
-def model_conv(cfg, load_weights=True):
+def model_conv(input_shape, cfg, load_weights=True):
     """
     Create the convolutional autoencoder model
 
@@ -126,14 +136,13 @@ def model_conv(cfg, load_weights=True):
     Returns:
         model: PyTorch model
     """
-    input_shape = cfg.INPUT_SHAPE  # Assuming (H, W, C) format
-    hidden_units = cfg.CLUSTER.HIDDEN_UNITS
-    weight_path = cfg.AUTOENCODER.WEIGTH_PATH
+    hidden_units = cfg.dsc.hidden_units
+    weight_path = cfg.dsc.ae_conv.weight_path
 
-    model = ConvAutoencoder(input_shape, hidden_units)
+    model = ConvAutoencoder(input_shape, hidden_units).to(cfg.device)
 
     if load_weights and os.path.exists(weight_path):
-        model.load_state_dict(torch.load(weight_path, map_location="cpu"))
+        model.load_state_dict(torch.load(weight_path, map_location=cfg.device))
         print(f"model_conv: weights was loaded, weight path is {weight_path}")
 
     return model
@@ -209,10 +218,10 @@ def train_base(
         device: Device to train on ('cpu' or 'cuda')
     """
     if epoch is None:
-        epoch = cfg.AUTOENCODER.AUTOENCODER_EPOCHS
+        epoch = cfg.dsc.ae_conv.epochs
 
-    hidden_units = cfg.CLUSTER.HIDDEN_UNITS
-    weight_path = cfg.AUTOENCODER.WEIGTH_PATH
+    hidden_units = cfg.dsc.hidden_units
+    weight_path = os.path.join(cfg.training.weight_path, cfg.dsc.ae_conv.weight_path)
 
     model.to(device)
     optimizer = optim.Adam(model.parameters())

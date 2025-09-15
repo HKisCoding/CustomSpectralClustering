@@ -16,8 +16,7 @@ from utils.Metrics import run_evaluate_with_labels
 
 # Configuration for SelfAdjustGraphTrainer
 config_dict = {
-    "device": torch.device("cuda" if torch.cuda.is_available() else "cpu"),
-    "training": {"lr": 0.001, "num_epoch": 100},
+    "training": {"lr": 0.0005, "num_epoch": 100},
     "self_adjust_graph": {
         "g_dim": 32,
         "gamma": 1,
@@ -30,11 +29,11 @@ config_dict = {
     "school": {
         "k": 10,
         "feat_size": 512,
-        "out_feat": 512,
-        "gcn_architecture": [1024, 512],
-        "spectral_architecture": [1024, 1024, 512],
+        "out_feat": 256,
+        "gcn_architecture": [1024, 256],
+        "spectral_architecture": [1024, 1024, 256],
     },
-    "dataset": {"dataset": "mnist", "batch_size": 2000},
+    "dataset": {"dataset": "MSRC-v2", "batch_size": 456},
     "backbone": {
         "name": "resnet18",
         "pretrained": True,
@@ -54,7 +53,9 @@ def run_self_adjust_graph_net():
     dataset = config.dataset.dataset
 
     features = torch.load(config.dataset.data_path[dataset]["features"])
+    features = features.float()
     labels = torch.load(config.dataset.data_path[dataset]["labels"]).squeeze()
+    labels = labels.float()
 
     n_cluster = len(torch.unique(labels))
 
@@ -128,7 +129,9 @@ def run_spectral_net():
     dataset = config.dataset.dataset
 
     features = torch.load(config.dataset.data_path[dataset]["features"])
+    features = features.float()
     labels = torch.load(config.dataset.data_path[dataset]["labels"]).squeeze()
+    labels = labels.float()
 
     n_cluster = len(torch.unique(labels))
 
@@ -267,7 +270,7 @@ def run_training_auto_encoder():
 
 
 if __name__ == "__main__":
-    run_spectral_net()
-    # run_self_adjust_graph_net()
+    # run_spectral_net()
+    run_self_adjust_graph_net()
     # run_validation()
     # run_training_auto_encoder()

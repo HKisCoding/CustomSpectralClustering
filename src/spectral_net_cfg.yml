@@ -1,0 +1,113 @@
+mnist:
+  training:
+    lr: 0.001
+    num_epoch: 100
+  self_adjust_graph:
+    g_dim: 32
+    gamma: 1
+    mu: 0.1
+    delta: 1
+    cluster: 10
+    auxillary_loss_kind: entropy
+    auxillary_loss_alpha: 0.1
+  school:
+    k: 10
+    feat_size: 512
+    out_feat: 512
+    gcn_architecture:
+    - 1024
+    - 512
+    spectral_architecture:
+    - 1024
+    - 1024
+    - 512
+  dataset:
+    dataset: mnist
+    batch_size: 2000
+  backbone:
+    name: resnet18
+    pretrained: true
+    feature_dims: 512
+    z_dims: 256
+  spectral:
+    architecture:
+    - 1024
+    - 1024
+    - 512
+    scale_k: 10
+
+coil-20:
+  training:
+    lr: 0.00075
+    num_epoch: 100
+  self_adjust_graph:
+    g_dim: 32
+    gamma: 1
+    mu: 0.1
+    delta: 1
+    cluster: 10
+    auxillary_loss_kind: entropy
+    auxillary_loss_alpha: 0.1
+  school:
+    k: 10
+    feat_size: 512
+    out_feat: 512
+    gcn_architecture:
+    - 1024
+    - 512
+    spectral_architecture:
+    - 1024
+    - 1024
+    - 512
+  dataset:
+    dataset: coil-20
+    batch_size: 1440
+  backbone:
+    name: resnet18
+    pretrained: true
+    feature_dims: 512
+      z_dims: 256
+  spectral:
+    architecture:
+    - 1024
+    - 1024
+    - 512
+    scale_k: 10
+
+MSRC-v2:
+  training:
+    lr: 0.00075
+    num_epoch: 100
+  self_adjust_graph:
+    g_dim: 32
+    gamma: 1
+    mu: 0.1
+    delta: 1
+    cluster: 10
+    auxillary_loss_kind: entropy
+    auxillary_loss_alpha: 0.1
+  school:
+    k: 10
+    feat_size: 512
+    out_feat: 256
+    gcn_architecture:
+    - 1024
+    - 256
+    spectral_architecture:
+    - 1024
+    - 1024
+    - 256
+  dataset:
+    dataset: MSRC-v2
+    batch_size: 456
+  backbone:
+    name: resnet18
+    pretrained: true
+    feature_dims: 512
+    z_dims: 256
+  spectral:
+    architecture:
+    - 1024
+    - 1024
+    - 512
+    scale_k: 10

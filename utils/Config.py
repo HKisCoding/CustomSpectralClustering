@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Type, Union
+from typing import Any, Dict, List, Optional, Type
 
 import torch
 
@@ -52,6 +52,10 @@ class DatasetConfig(BaseConfig):
             "usps_mnist_ae": {
                 "features": "dataset/embedding/auto_encoder/usps_mnist_Feature.pt",
                 "labels": "dataset/embedding/auto_encoder/usps_mnist_Label.pt",
+            },
+            "animal-50": {
+                "features": "dataset/embedding/mat_file/animal-50_view_0_Feature.pt",
+                "labels": "dataset/embedding/mat_file/animal-50_view_0_Label.pt",
             },
         }
     )
@@ -159,6 +163,15 @@ class AutoEncoderConfig(BaseConfig):
 
 
 @dataclass
+class AEConvConfig(BaseConfig):
+    """AEConv model related settings"""
+
+    batch_size: int = 256
+    weight_path: str = "ae_conv/ae_conv.pth"
+    epochs: int = 100
+
+
+@dataclass
 class DSCConfig(BaseConfig):
     """DSC model related settings"""
 
@@ -167,15 +180,7 @@ class DSCConfig(BaseConfig):
     n_neighbors: int = 10
     scale_k: int = 10
     n_iter: int = 20
-
-
-@dataclass
-class AEConvConfig(BaseConfig):
-    """AEConv model related settings"""
-
-    batch_size: int = 256
-    weight_path: str = "ae_conv/ae_conv.pth"
-    epochs: int = 100
+    ae_conv: AEConvConfig = field(default_factory=AEConvConfig)
 
 
 @dataclass
@@ -187,13 +192,14 @@ class Config(BaseConfig):
     training: TrainingConfig = field(default_factory=TrainingConfig)
     backbone: BackboneConfig = field(default_factory=BackboneConfig)
     optimization: OptimizationConfig = field(default_factory=OptimizationConfig)
-    spectral: SpectralConfig = field(default_factory=SpectralConfig)
-    self_adjust_graph: SelfAdjustGraphConfig = field(
+    spectral: SpectralConfig | None = field(default_factory=SpectralConfig)
+    self_adjust_graph: SelfAdjustGraphConfig | None = field(
         default_factory=SelfAdjustGraphConfig
     )
-    school: SCHOOLConfig = field(default_factory=SCHOOLConfig)
-    siamese: SiameseConfig = field(default_factory=SiameseConfig)
-    auto_encoder: AutoEncoderConfig = field(default_factory=AutoEncoderConfig)
+    school: SCHOOLConfig | None = field(default_factory=SCHOOLConfig)
+    siamese: SiameseConfig | None = field(default_factory=SiameseConfig)
+    auto_encoder: AutoEncoderConfig | None = field(default_factory=AutoEncoderConfig)
+    dsc: DSCConfig | None = field(default_factory=DSCConfig)
     # Device settings
     device: torch.device = field(
         default_factory=lambda: torch.device(
@@ -227,5 +233,7 @@ class Config(BaseConfig):
             "school": SCHOOLConfig,
             "siamese": SiameseConfig,
             "auto_encoder": AutoEncoderConfig,
+            "dsc": DSCConfig,
+            "ae_conv": AEConvConfig,
         }
         return config_classes.get(name)

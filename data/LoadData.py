@@ -12,12 +12,15 @@ from sklearn.preprocessing import LabelEncoder
 from torch.nn import Sequential
 from torch.utils.data import DataLoader, Dataset, random_split
 
+from data.LoadMatData import read_mat_data
 from src.models.backbones.resnet import ResNet
 from utils.Config import Config
 
 
 class ImageDataset(Dataset):
-    def __init__(self, image_dir: str, annotation: str, device="cpu", add_dim=False):
+    def __init__(
+        self, image_dir: str, annotation: str, device: torch.device, add_dim=False
+    ):
         self.image_dir = image_dir
         self.annotation = pd.read_csv(
             annotation, index_col=0, converters={"label_name": str}
@@ -55,8 +58,11 @@ class ImageDataset(Dataset):
 
 
 def load_dataset(
-    dataset_name: str, train_size: float = 0.8, device: str = "cpu"
-) -> tuple[Dataset, Dataset]:
+    dataset_name: str,
+    train_size: float = 0.8,
+    split_dataset: bool = True,
+    device: torch.device = torch.device("cpu"),
+) -> tuple[Dataset, Dataset] | Dataset:
     """Load dataset and optionally extract features.
 
     Args:
@@ -80,11 +86,13 @@ def load_dataset(
         dataset = ImageDataset(image_dir=img_dir, annotation=annotation, device=device)
 
         # Split into train and validation sets
-        trainset_len = int(len(dataset) * train_size)
-        validset_len = len(dataset) - trainset_len
-        trainset, validset = random_split(dataset, [trainset_len, validset_len])
-
-        return trainset, validset
+        if split_dataset:
+            trainset_len = int(len(dataset) * train_size)
+            validset_len = len(dataset) - trainset_len
+            trainset, validset = random_split(dataset, [trainset_len, validset_len])
+            return trainset, validset
+        else:
+            return dataset
     except:
         raise ValueError(f"Dataset '{dataset_name}' is not supported")
 
@@ -353,10 +361,37 @@ def create_mnist_features(
     print("USPS MNIST features and labels saved successfully!")
 
 
+def create_mat_features(
+    dataset_name, mat_file_path, output_dir="dataset/embedding/mat_file"
+):
+    """
+    Extract first view from train and test datasets and save as .pt files
+
+    Args:
+        mat_file_path: Path to the .mat file
+        output_dir: Directory to save the output files
+    """
+    print(f"Loading data from: {mat_file_path}")
+
+    # Load the datasets
+    read_mat_data(
+        str_name=mat_file_path,
+        dataset_name=dataset_name,
+        output_dir=output_dir,
+        save_feature_label=True,
+    )
+
+
 if __name__ == "__main__":
     backbone_name = Config().backbone.name
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
+
+    create_mat_features(
+        dataset_name="animal-50",
+        mat_file_path="dataset/animal.mat",
+        output_dir="dataset/embedding/mat_file",
+    )
 
     # create_coil20_annotation_csv()
 
@@ -369,5 +404,5 @@ if __name__ == "__main__":
     # create_usps_mnist_features(
     #     backbone_name=backbone_name, device=device, batch_size=1024
     # )
-    create_mnist_ae_features(device=device, batch_size=1024)
+    # create_mnist_ae_features(device=device, batch_size=1024)
     # create_mnist_features()

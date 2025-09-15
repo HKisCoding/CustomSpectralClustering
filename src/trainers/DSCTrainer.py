@@ -4,12 +4,48 @@ import numpy as np
 import torch
 import torch.nn as nn
 from sklearn.cluster import KMeans
-from torch.utils.data import DataLoader, TensorDataset
+from torch.utils.data import DataLoader, Sampler, TensorDataset
+from tqdm import tqdm
 
 from src.models.net.AE_conv import model_conv, train_base
 from utils.Loss import MSELoss
 from utils.Metrics import run_evaluate_with_labels
 from utils.Utils import create_affinity_matrix, get_clusters_by_kmeans
+
+
+class SkipRepeatTakeSampler(Sampler):
+    """
+    Custom sampler that replicates TensorFlow's skip().batch().repeat().take() behavior
+    """
+
+    def __init__(self, data_size, n_skip, n_iter, batch_size):
+        self.data_size = data_size
+        self.n_skip = n_skip
+        self.n_iter = n_iter
+        self.batch_size = batch_size
+
+    def __iter__(self):
+        # Create indices starting from n_skip position
+        indices = list(range(self.data_size))
+        if self.n_skip > 0:
+            indices = indices[self.n_skip :] + indices[: self.n_skip]
+
+        # Generate indices for n_iter batches with repeat behavior
+        sampled_indices = []
+        for i in range(self.n_iter):
+            batch_start = (i * self.batch_size) % len(indices)
+            batch_end = min(batch_start + self.batch_size, len(indices))
+            sampled_indices.extend(indices[batch_start:batch_end])
+
+            # Wrap around if needed (repeat behavior)
+            if batch_end < batch_start + self.batch_size:
+                remaining = self.batch_size - (batch_end - batch_start)
+                sampled_indices.extend(indices[:remaining])
+
+        return iter(sampled_indices)
+
+    def __len__(self):
+        return self.n_iter * self.batch_size
 
 
 def sorted_eig(X, device="cpu"):
@@ -103,33 +139,33 @@ class DSC_trainer(object):
     """
 
     def __init__(self, cfg, device: torch.device):
-        self.model_type = cfg.MODEL_TYPE
         self.cfg = cfg
         self.device = device
+        self.model: nn.Module | None = None
         self.model_has_decoder = True
-        self.model = model_conv(cfg, load_weights=False)
-        self.model.to(self.device)
 
-        self.hidden_units = self.cfg.DSCConfig.hidden_units
-        self.batch_size = self.cfg.DSCConfig.batch_size
-        self.n_neighbors = self.cfg.DSCConfig.n_neighbors
-        self.scale_k = self.cfg.DSCConfig.scale_k
+        self.hidden_units = self.cfg.dsc.hidden_units
+        self.batch_size = self.cfg.dsc.batch_size
+        self.n_neighbors = self.cfg.dsc.n_neighbors
+        self.scale_k = self.cfg.dsc.scale_k
 
-        self.ae_batch_size = self.cfg.AEConvConfig.batch_size
-        self.ae_epochs = self.cfg.AEConvConfig.epochs
-        self.ae_weight_path = self.cfg.AEConvConfig.weight_path
+        self.ae_batch_size = self.cfg.dsc.ae_conv.batch_size
+        self.ae_epochs = self.cfg.dsc.ae_conv.epochs
+        self.ae_weight_path = os.path.join(
+            self.cfg.training.weight_path,
+            self.cfg.dsc.ae_conv.weight_path,
+        )
 
-    def load_reconstruction_weights(self, cfg, path=None):
+        self.lr = self.cfg.training.lr
+
+    def load_reconstruction_weights(self):
         """Load pre-trained autoencoder weights"""
-        self.cfg = cfg if cfg else self.cfg
-        if not path:
-            path = cfg.AEConvConfig.weight_path
-        if not os.path.exists(path):
+        if not os.path.exists(self.ae_weight_path):
             raise Exception("no weights available")
 
-        state_dict = torch.load(path, map_location=self.device)
+        state_dict = torch.load(self.ae_weight_path, map_location=self.device)
         self.model.load_state_dict(state_dict)
-        print(f"Loaded reconstruction weights from {path}")
+        print(f"Loaded reconstruction weights from {self.ae_weight_path}")
 
     def get_AE_embeddings(self, x):
         """
@@ -160,41 +196,20 @@ class DSC_trainer(object):
                 embeddings = self.model(x)
                 return embeddings.cpu().numpy()
 
-    def train_reconstruction(
-        self, x: torch.Tensor, epoch: torch.Tensor, dataset=None, cfg=None, y=None
-    ):
+    def train_reconstruction(self, dataloader: DataLoader):
         """
         Train the reconstruction (autoencoder) part of the model
 
         Args:
-            x: Input data
-            epoch: Number of training epochs
-            dataset: PyTorch dataset (optional)
-            cfg: Configuration object
-            y: Labels (not used in reconstruction training)
+            dataloader: DataLoader with input data
         """
-        self.cfg = cfg if cfg else self.cfg
-        batchsize = self.cfg.AEConvConfig.batch_size
-
-        if not epoch:
-            epoch = self.cfg.AEConvConfig.epochs
-
-        # Prepare dataloader
-        if dataset:
-            dataloader = DataLoader(dataset, batch_size=batchsize, shuffle=True)
-        else:
-            if isinstance(x, np.ndarray):
-                x = torch.from_numpy(x).float()
-
-            # Create dataset for autoencoder training (input as both x and target)
-            dataset = TensorDataset(x, x)
-            dataloader = DataLoader(dataset, batch_size=batchsize, shuffle=True)
+        epoch = self.cfg.dsc.ae_conv.epochs
 
         # Train the base model
         train_base(self.model, dataloader, self.cfg, epoch, device=self.device)
 
         # Reload weights after training
-        self.load_reconstruction_weights(self.cfg)
+        self.load_reconstruction_weights()
 
     def train(self, x, n_clusters):
         device = self.device
@@ -210,9 +225,13 @@ class DSC_trainer(object):
         ite_PI = 0
         a_PI = 0
         n_skip = 0
-        n_iter = self.cfg.DSCConfig.n_iter
+        n_iter = self.cfg.dsc.n_iter
         assignment = np.array([-1] * len(x))
-        optimizer = torch.optim.Adam(self.model.parameters())
+        optimizer = torch.optim.Adam(
+            self.model.parameters(),
+            lr=self.lr,
+        )
+        losses = []
 
         # Main training loop
         for step in range(20):
@@ -229,11 +248,15 @@ class DSC_trainer(object):
             H_pi = H.copy()
 
             # Construct normalized affinity matrix W
-            W = create_affinity_matrix(
-                torch.Tensor(H_pi),
-                n_neighbors=self.n_neighbors,
-                scale_k=self.scale_k,
-                device=self.device,
+            W = (
+                create_affinity_matrix(
+                    torch.Tensor(H_pi),
+                    n_neighbors=self.n_neighbors,
+                    scale_k=self.scale_k,
+                    device=self.device,
+                )
+                .cpu()
+                .numpy()
             )
 
             # Power iteration
@@ -283,7 +306,8 @@ class DSC_trainer(object):
                 )
 
                 self.model.train()
-                for epoch in range(10):
+                pbar = tqdm(range(10), desc="Training")
+                for _ in pbar:
                     epoch_loss = 0.0
                     for x_batch, y_batch in dataloader:
                         optimizer.zero_grad()
@@ -294,38 +318,34 @@ class DSC_trainer(object):
                         loss.backward()
                         optimizer.step()
                         epoch_loss += loss.item()
+                        pbar.set_postfix({"loss": f"{loss.item():.4f}"})
+                losses.append(epoch_loss / len(dataloader))
                 continue
 
             # Create dataset with skipping mechanism
             # PyTorch equivalent of TF's skip().batch().repeat().take()
             dataset = TensorDataset(x, y_true_tensor)
 
-            # Create custom sampler for skipping
-            indices = list(range(len(x)))
-            if n_skip > 0:
-                indices = indices[n_skip:] + indices[:n_skip]
+            # Create custom sampler that replicates TF's skip().batch().repeat().take()
+            sampler = SkipRepeatTakeSampler(
+                data_size=len(x),
+                n_skip=n_skip,
+                n_iter=n_iter,
+                batch_size=self.batch_size,
+            )
 
-            # Take only n_iter batches
-            sampled_indices = []
-            for i in range(n_iter):
-                batch_start = (i * self.batch_size) % len(indices)
-                batch_end = min(batch_start + self.batch_size, len(indices))
-                sampled_indices.extend(indices[batch_start:batch_end])
-                if batch_end < batch_start + self.batch_size:
-                    # Wrap around
-                    remaining = self.batch_size - (batch_end - batch_start)
-                    sampled_indices.extend(indices[:remaining])
+            # Create DataLoader with custom sampler
+            dataloader = DataLoader(
+                dataset, batch_size=self.batch_size, sampler=sampler
+            )
 
-            # Update skip counter
-            n_skip = (n_skip + n_iter * self.batch_size) % len(x)
+            # Update skip counter (equivalent to Keras implementation)
+            n_skip = (n_skip + n_iter) * self.batch_size % x.shape[0]
 
-            # Train on selected samples
+            # Train using DataLoader
             self.model.train()
-            for i in range(0, len(sampled_indices), self.batch_size):
-                batch_indices = sampled_indices[i : i + self.batch_size]
-                x_batch = x[batch_indices]
-                y_batch = y_true_tensor[batch_indices]
-
+            epoch_loss = 0.0
+            for x_batch, y_batch in dataloader:
                 optimizer.zero_grad()
                 y_pred = self.model(x_batch)
                 if isinstance(y_pred, tuple):
@@ -333,8 +353,10 @@ class DSC_trainer(object):
                 loss = torch.nn.functional.mse_loss(y_batch, y_pred)
                 loss.backward()
                 optimizer.step()
+                epoch_loss += loss.item()
+            losses.append(epoch_loss / len(dataloader))
 
-        return assignment
+        return losses
 
     def _create_encoder_only_model(self):
         """
