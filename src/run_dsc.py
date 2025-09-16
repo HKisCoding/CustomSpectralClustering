@@ -17,14 +17,14 @@ config_dict = {
     "dataset": {"dataset": "coil-20", "batch_size": 256},
     "dsc": {
         "hidden_units": 10,
-        "batch_size": 256,
+        "batch_size": 512,
         "n_neighbors": 10,
         "scale_k": 10,
         "n_iter": 20,
         "ae_conv": {
-            "batch_size": 256,
+            "batch_size": 512,
             "weight_path": "ae_conv/ae_conv.pth",
-            "epochs": 2,
+            "epochs": 100,
         },
     },
 }
@@ -52,7 +52,7 @@ def train_dsc():
     features = torch.cat(features, dim=0)
     labels = torch.cat(labels, dim=0)
 
-    trainer.model = model_conv([batch_size, 3, 224, 224], config, load_weights=False)
+    trainer.model = model_conv([batch_size, 3, 28, 28], config, load_weights=False)
 
     n_cluster = len(torch.unique(labels))
 
