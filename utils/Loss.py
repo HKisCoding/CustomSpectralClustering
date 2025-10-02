@@ -275,3 +275,24 @@ class MSELoss(nn.Module):
         y_pred_batch = y_pred_batch[:, :hidden_units]
         loss = F.mse_loss(y_true_batch, y_pred_batch)
         return loss
+
+
+class GAELoss(nn.Module):
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+
+    def forward(self, recons, weights, raw_weights, embedding, input_shape):
+        loss = 0
+        loss += raw_weights * torch.log(raw_weights / recons + 10**-10)
+        loss = loss.sum(dim=1)
+        loss = loss.mean()
+        # L2-Regularization
+        # loss += 10**-3 * (torch.mean(self.embedding.pow(2)))
+        # loss += 10**-3 * (torch.mean(self.W1.pow(2)) + torch.mean(self.W2.pow(2)))
+        # loss += 10**-3 * (torch.mean(self.W1.abs()) + torch.mean(self.W2.abs()))
+        degree = weights.sum(dim=1)
+        L = torch.diag(degree) - weights
+        loss += (
+            0.1 * torch.trace(embedding.t().matmul(L).matmul(embedding)) / input_shape
+        )
+        return loss
