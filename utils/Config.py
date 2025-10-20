@@ -50,8 +50,8 @@ class DatasetConfig(BaseConfig):
                 "labels": "dataset/embedding/resnet/usps_mnist_Label.pt",
             },
             "usps_mnist_ae": {
-                "features": "dataset/embedding/auto_encoder/usps_mnist_Feature.pt",
-                "labels": "dataset/embedding/auto_encoder/usps_mnist_Label.pt",
+                "features": "dataset/embedding/auto_encoder/USPS_Feature.pt",
+                "labels": "dataset/embedding/auto_encoder/USPS_Label.pt",
             },
             "animal-50": {
                 "features": "dataset/embedding/mat_file/animal-50_view_0_Feature.pt",

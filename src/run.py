@@ -29,11 +29,11 @@ config_dict = {
     "school": {
         "k": 10,
         "feat_size": 512,
-        "out_feat": 256,
-        "gcn_architecture": [1024, 256],
-        "spectral_architecture": [1024, 1024, 256],
+        "out_feat": 512,
+        "gcn_architecture": [1024, 512],
+        "spectral_architecture": [1024, 1024, 512],
     },
-    "dataset": {"dataset": "MSRC-v2", "batch_size": 456},
+    "dataset": {"dataset": "usps_mnist_ae", "batch_size": 2000},
     "backbone": {
         "name": "resnet18",
         "pretrained": True,
