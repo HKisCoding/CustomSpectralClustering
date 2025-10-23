@@ -31,6 +31,14 @@ class AdaptiveGAE(nn.Module):
         ini = torch.rand(shape) * 2 * bound - bound
         return torch.nn.Parameter(ini, requires_grad=True)
 
+    def get_embedding(self, W: torch.Tensor, X: torch.Tensor):
+        D = torch.sum(W, dim=1)
+        D_sqrt_inv = torch.diag(torch.pow(D + 1e-8, -0.5))
+        L = D_sqrt_inv.mm(D - W).mm(D_sqrt_inv)
+        embedding = L.mm(X.matmul(self.W1))
+        embedding = torch.nn.functional.relu(embedding)
+        return embedding, L
+
     def forward(self, W: torch.Tensor, X: torch.Tensor):
         """
         Forward pass of AdaptiveGAE.
@@ -42,15 +50,7 @@ class AdaptiveGAE(nn.Module):
         Returns:
             recons_w: Reconstructed affinity matrix.
         """
-        D = torch.sum(W, dim=1)
-        # Compute normalized Laplacian: L = I - D^(-1/2) * W * D^(-1/2)
-        D_sqrt_inv = torch.diag(
-            torch.pow(D + 1e-8, -0.5)
-        )  # Add small epsilon to avoid division by zero
-        L = D_sqrt_inv.mm(D - W).mm(D_sqrt_inv)
-        # sparse
-        embedding = L.mm(X.matmul(self.W1))
-        embedding = torch.nn.functional.relu(embedding)
+        embedding, L = self.get_embedding(W, X)
         # sparse
         self.embedding = L.mm(embedding.matmul(self.W2))
         distances = distance(self.embedding.t(), self.embedding.t())

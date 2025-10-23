@@ -57,6 +57,10 @@ class DatasetConfig(BaseConfig):
                 "features": "dataset/embedding/mat_file/animal-50_view_0_Feature.pt",
                 "labels": "dataset/embedding/mat_file/animal-50_view_0_Label.pt",
             },
+            "fashion-mnist": {
+                "features": "dataset/embedding/auto_encoder/fashion_mnist_Feature.pt",
+                "labels": "dataset/embedding/auto_encoder/fashion_mnist_Label.pt",
+            },
         }
     )
 
@@ -114,6 +118,7 @@ class SelfAdjustGraphConfig(BaseConfig):
     mu: float = 0.1
     delta: float = 0.1
     eta: float = 0.1
+    theta: float = 0.1
     cluster: int = 10
     auxillary_loss_kind: str = "entropy"
     auxillary_loss_alpha: float = 1.0
@@ -125,6 +130,7 @@ class SCHOOLConfig(BaseConfig):
 
     node_size: int = 512
     gcn_architecture: List[int] = field(default_factory=lambda: [512, 256])
+    gae_architecture: List[int] = field(default_factory=lambda: [1024, 256, 64])
     n_neighbors: int = 10
     feat_size: int = 512
     out_feat: int = 128

@@ -15,8 +15,8 @@ def create_feature_from_h5(dataset_name: str, h5_file_path: str):
         x = np.array(f["x"][:])
         y = np.array(f["y"][:])
 
-    features = torch.from_numpy(x).to(device)
-    labels = torch.from_numpy(y).to(device)
+    features = torch.from_numpy(x).float().to(device)
+    labels = torch.from_numpy(y).float().to(device)
 
     dataset = torch.utils.data.TensorDataset(features, labels)
 

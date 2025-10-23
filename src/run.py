@@ -9,6 +9,7 @@ import torchvision.transforms as transforms
 from torch.utils.data import DataLoader
 
 from src.trainers.AutoEncoderTrainer import AutoEncoderTrainer
+from trainers.AdjustiveGraphEncoderTrainer import SelfAdjustGraphEncoderTrainer
 from trainers.SelfAdjustGraphTrainer import SelfAdjustGraphTrainer
 from trainers.SpectralNetTrainer import SpectralNetTrainer
 from utils.Config import Config
@@ -22,6 +23,7 @@ config_dict = {
         "gamma": 1,
         "mu": 0.1,
         "delta": 1,
+        "theta": 1,
         "cluster": 10,  # Number of clusters
         "auxillary_loss_kind": "entropy",
         "auxillary_loss_alpha": 0.1,
@@ -30,10 +32,11 @@ config_dict = {
         "k": 10,
         "feat_size": 512,
         "out_feat": 512,
+        "gae_architecture": [1024, 1024, 512],
         "gcn_architecture": [1024, 512],
         "spectral_architecture": [1024, 1024, 512],
     },
-    "dataset": {"dataset": "usps_mnist_ae", "batch_size": 2000},
+    "dataset": {"dataset": "MSRC-v2", "batch_size": 2000},
     "backbone": {
         "name": "resnet18",
         "pretrained": True,
@@ -57,6 +60,9 @@ def run_self_adjust_graph_net():
     labels = torch.load(config.dataset.data_path[dataset]["labels"]).squeeze()
     labels = labels.float()
 
+    if config.dataset.batch_size > features.shape[0]:
+        config.dataset.batch_size = features.shape[0]
+
     n_cluster = len(torch.unique(labels))
 
     config.self_adjust_graph.cluster = n_cluster
@@ -64,6 +70,10 @@ def run_self_adjust_graph_net():
     config.school.feat_size = features.shape[1]
     val_results = []
     losses = []
+    output_path = (
+        f"output\\self_adjust_graph_with_soft_assignment\\{config.dataset.dataset}"
+    )
+    os.makedirs(output_path, exist_ok=True)
     for i in range(5):
         # Create trainer
         loss = 0
@@ -85,19 +95,12 @@ def run_self_adjust_graph_net():
             losses.append(loss)
             val_results.append(result)
 
-        output_path = (
-            f"output\\self_adjust_graph_with_soft_assignment\\{config.dataset.dataset}"
-        )
-        os.makedirs(output_path, exist_ok=True)
-
-        loss_df = pd.DataFrame(losses)
-        loss_df.to_csv(
-            f"{output_path}\\traintime{i + 1}_{config.training.num_epoch}epochs_loss.csv"
-        )
-        val_df = pd.DataFrame(val_results)
-        val_df.to_csv(
-            f"{output_path}\\traintime{i + 1}_{config.training.num_epoch}epochs_val.csv"
-        )
+            # loss_df = pd.DataFrame(losses)
+            # loss_df.to_csv(
+            #     f"{output_path}\\traintime{i + 1}_{config.training.num_epoch}epochs_loss.csv"
+            # )
+            val_df = pd.DataFrame(val_results)
+            val_df.to_csv(f"{output_path}\\{config.training.num_epoch}epochs_val.csv")
 
         # os.makedirs(
         #     os.path.join(
