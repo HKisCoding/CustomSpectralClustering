@@ -126,8 +126,8 @@ def load_feature_from_scratch(dataset_name: str, model: Sequential, device: str)
     features = torch.cat([train_features, valid_features], dim=0)
     labels = torch.cat([train_labels, valid_labels], dim=0)
 
-    torch.save(features, f"dataset\\resnet\\{dataset_name}_Feature.pt")
-    torch.save(labels, f"dataset\\resnet\\{dataset_name}_Label.pt")
+    torch.save(features, f"dataset/embedding/resnet/{dataset_name}_Feature.pt")
+    torch.save(labels, f"dataset/embedding/resnet/{dataset_name}_Label.pt")
 
 
 def create_features_object(dataset_name, backbone_name, device):
@@ -193,22 +193,6 @@ def create_image_features_coil20(backbone: str, device="cpu"):
     os.makedirs("dataset/coil-20", exist_ok=True)
     torch.save(features, "dataset/resnet/coil-20_Feature.pt")
     torch.save(labels, "dataset/resnet/coil-20_Label.pt")
-
-
-def get_leumika(path):
-    data = pd.read_csv(path, index_col=0)
-    label = data["label"].to_numpy()
-    feature = data.drop(["label"], axis=1).to_numpy()
-
-    return torch.tensor(feature).float(), torch.tensor(label)
-
-
-def get_prokaryotic(path):
-    data = loadmat(path)
-    label = data["truth"][:, 0]
-    feature = data["gene_repert"]
-
-    return torch.tensor(feature).float(), torch.Tensor(label)
 
 
 def create_usps_mnist_features(
@@ -379,22 +363,52 @@ def create_mat_features(
     )
 
 
+def create_caltech_101_annotation_csv():
+    img_dir = "dataset\\Caltech_101"
+    output_csv = "dataset\\Caltech_101.csv"
+    data = []
+
+    # Get all category directories
+    categories = sorted(
+        [d for d in os.listdir(img_dir) if os.path.isdir(os.path.join(img_dir, d))]
+    )
+
+    # Create label mapping: category_name -> numeric label
+    label_map = {cat: idx for idx, cat in enumerate(categories)}
+
+    idx = 0
+    for label_name in categories:
+        category_dir = os.path.join(img_dir, label_name)
+        # Get all jpg files in this category
+        files = glob.glob(os.path.join(category_dir, "*.jpg"))
+        for f in sorted(files):
+            base = os.path.basename(f)
+            label = label_map[label_name]
+            data.append([idx, base, label_name, label])
+            idx += 1
+
+    df = pd.DataFrame(data, columns=["", "img_name", "label_name", "label"])
+    df.to_csv(output_csv, index=False)
+
+
 if __name__ == "__main__":
     backbone_name = Config().backbone.name
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    create_mat_features(
-        dataset_name="animal-50",
-        mat_file_path="dataset/animal.mat",
-        output_dir="dataset/embedding/mat_file",
-    )
+    # create_caltech_101_annotation_csv()
+
+    # create_mat_features(
+    #     dataset_name="animal-50",
+    #     mat_file_path="dataset/animal.mat",
+    #     output_dir="dataset/embedding/mat_file",
+    # )
 
     # create_coil20_annotation_csv()
 
-    # create_features_object(
-    #     dataset_name=dataset_name, backbone_name=backbone_name, device=device
-    # )
+    create_features_object(
+        dataset_name="Caltech_101", backbone_name=backbone_name, device=device
+    )
     # create_mnist_features_object("dataset/MNIST")
 
     # Example: Create USPS MNIST features

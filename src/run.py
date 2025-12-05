@@ -9,7 +9,7 @@ import torchvision.transforms as transforms
 from torch.utils.data import DataLoader
 
 from src.trainers.AutoEncoderTrainer import AutoEncoderTrainer
-from trainers.AdjustiveGraphEncoderTrainer import SelfAdjustGraphEncoderTrainer
+from trainers.AdjustiveGraphManifoldTrainer import SelfAdjustGraphManifoldTrainer
 from trainers.SelfAdjustGraphTrainer import SelfAdjustGraphTrainer
 from trainers.SpectralNetTrainer import SpectralNetTrainer
 from utils.Config import Config
@@ -17,10 +17,11 @@ from utils.Metrics import run_evaluate_with_labels
 
 # Configuration for SelfAdjustGraphTrainer
 config_dict = {
-    "training": {"lr": 0.0005, "num_epoch": 100},
+    "training": {"lr": 0.00075, "num_epoch": 200},
     "self_adjust_graph": {
-        "g_dim": 32,
+        "g_dim": 10,
         "gamma": 1,
+        "sigma": 1.0,
         "mu": 0.1,
         "delta": 1,
         "theta": 1,
@@ -32,11 +33,11 @@ config_dict = {
         "k": 10,
         "feat_size": 512,
         "out_feat": 512,
-        "gae_architecture": [1024, 1024, 512],
+        "gae_architecture": [1024, 512],
         "gcn_architecture": [1024, 512],
         "spectral_architecture": [1024, 1024, 512],
     },
-    "dataset": {"dataset": "MSRC-v2", "batch_size": 2000},
+    "dataset": {"dataset": "Caltech_101", "batch_size": 2000},
     "backbone": {
         "name": "resnet18",
         "pretrained": True,
@@ -68,10 +69,11 @@ def run_self_adjust_graph_net():
     config.self_adjust_graph.cluster = n_cluster
     config.school.spectral_architecture.append(n_cluster)
     config.school.feat_size = features.shape[1]
+    # config.school.k = features.shape[0] - 1
     val_results = []
     losses = []
     output_path = (
-        f"output\\self_adjust_graph_with_soft_assignment\\{config.dataset.dataset}"
+        f"output/self_adjust_graph_with_soft_assignment/{config.dataset.dataset}"
     )
     os.makedirs(output_path, exist_ok=True)
     for i in range(5):
@@ -94,13 +96,11 @@ def run_self_adjust_graph_net():
             )
             losses.append(loss)
             val_results.append(result)
+            # val_df = pd.DataFrame(val_results)
+            # val_df.to_csv(f"{output_path}/{config.training.num_epoch}epochs_val.csv")
 
-            # loss_df = pd.DataFrame(losses)
-            # loss_df.to_csv(
-            #     f"{output_path}\\traintime{i + 1}_{config.training.num_epoch}epochs_loss.csv"
-            # )
-            val_df = pd.DataFrame(val_results)
-            val_df.to_csv(f"{output_path}\\{config.training.num_epoch}epochs_val.csv")
+            del trainer
+            torch.cuda.empty_cache()
 
         # os.makedirs(
         #     os.path.join(
@@ -158,17 +158,15 @@ def run_spectral_net():
         losses.append(loss)
         val_results.append(result)
 
-        output_path = f"output\\spectralnet\\{config.dataset.dataset}"
+        output_path = f"output/spectralnet/{config.dataset.dataset}"
         os.makedirs(output_path, exist_ok=True)
 
-        loss_df = pd.DataFrame(losses)
-        loss_df.to_csv(
-            f"{output_path}\\traintime{i + 1}_{config.training.num_epoch}epochs_loss.csv"
-        )
+        # loss_df = pd.DataFrame(losses)
+        # loss_df.to_csv(
+        #     f"{output_path}/{config.training.num_epoch}_epochs_loss.csv"
+        # )
         val_df = pd.DataFrame(val_results)
-        val_df.to_csv(
-            f"{output_path}\\traintime{i + 1}_{config.training.num_epoch}epochs_val.csv"
-        )
+        val_df.to_csv(f"{output_path}/{config.training.num_epoch}_epochs_val.csv")
 
 
 def run_validation():
@@ -204,7 +202,7 @@ def run_validation():
 
     # val_df = pd.DataFrame(val_results)
     # val_df.to_csv(
-    #     f"output\\self_adjust_graph_with_soft_assignment\\{config.dataset.dataset}_val.csv"
+    #     f"output/self_adjust_graph_with_soft_assignment/{config.dataset.dataset}_val.csv"
     # )
 
 
@@ -272,8 +270,60 @@ def run_training_auto_encoder():
     print("AutoEncoder training completed!")
 
 
+def run_self_adjust_graph_manifold():
+    # Create config object
+    config = Config.from_dict(config_dict)
+
+    # Load MSRC-v2 dataset and extract features
+
+    dataset = config.dataset.dataset
+
+    features = torch.load(config.dataset.data_path[dataset]["features"])
+    features = features.float()
+    labels = torch.load(config.dataset.data_path[dataset]["labels"]).squeeze()
+    labels = labels.float()
+
+    if config.dataset.batch_size > features.shape[0]:
+        config.dataset.batch_size = features.shape[0]
+
+    n_cluster = len(torch.unique(labels))
+
+    config.self_adjust_graph.cluster = n_cluster
+    config.school.spectral_architecture.append(n_cluster)
+    config.school.feat_size = features.shape[1]
+    val_results = []
+    losses = []
+    output_path = (
+        f"output/self_adjust_graph_with_soft_assignment/{config.dataset.dataset}"
+    )
+    os.makedirs(output_path, exist_ok=True)
+    for i in range(1):
+        # Create trainer
+        loss = 0
+        trainer = SelfAdjustGraphManifoldTrainer(config)
+        try:
+            # Train the model
+            loss = trainer.train(features=features, labels=labels)
+        except Exception as e:
+            print(e)
+            continue
+        finally:
+            cluster_assignment = trainer.predict(
+                X=features, n_clusters=n_cluster, use_weight=None
+            )
+            y_target = labels.detach().cpu().numpy()
+            result = run_evaluate_with_labels(
+                cluster_assignments=cluster_assignment, y=y_target, n_clusters=n_cluster
+            )
+            losses.append(loss)
+            val_results.append(result)
+            # val_df = pd.DataFrame(val_results)
+            # val_df.to_csv(f"{output_path}/{config.training.num_epoch}epochs_val.csv")
+
+
 if __name__ == "__main__":
     # run_spectral_net()
     run_self_adjust_graph_net()
+    # run_self_adjust_graph_manifold()
     # run_validation()
     # run_training_auto_encoder()

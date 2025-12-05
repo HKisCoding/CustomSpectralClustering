@@ -13,20 +13,24 @@ import torch.optim as optim
 from sklearn.model_selection import train_test_split
 from tqdm import tqdm
 
-from src.models.net.GraphAutoEncoder import AdaptiveGAE
-from src.models.net.SCHOOL import GraphEncoderSchool
+from src.models.net.GraphConvolutionNetwork import GCN
+from src.models.net.SCHOOL import SCHOOL
 from utils.Config import Config
-from utils.Loss import GAELoss, KLClusteringLoss, SpectralNetLoss
+from utils.Loss import KLClusteringLoss, SpectralNetLoss
 from utils.Metrics import run_evaluate_with_labels
 from utils.Process import pairwise_distance
-from utils.Utils import get_cluster_centroids, get_clusters_by_kmeans
+from utils.Utils import (
+    affinity_to_adjacency,
+    get_cluster_centroids,
+    get_clusters_by_kmeans,
+)
 
 from .BaseTrainer import BaseTrainer
 
 INF = 1e-8
 
 
-class SelfAdjustGraphEncoderTrainer(BaseTrainer):
+class SelfAdjustGraphManifoldTrainer(BaseTrainer):
     def __init__(self, config: Config):
         super().__init__(config)
         self.config = config
@@ -46,24 +50,24 @@ class SelfAdjustGraphEncoderTrainer(BaseTrainer):
         self.mu = self.config.self_adjust_graph.mu
         self.delta = self.config.self_adjust_graph.delta
         self.cluster = self.config.self_adjust_graph.cluster
+        self.sigma = self.config.self_adjust_graph.sigma
         self.kl_alpha = self.config.self_adjust_graph.auxillary_loss_alpha
         self.auxillary_loss_kind = self.config.self_adjust_graph.auxillary_loss_kind
-        self.theta = self.config.self_adjust_graph.theta
 
         self.feat_size = self.config.school.feat_size
         self.out_feat = self.config.school.out_feat
         self.k = self.config.school.k
 
-        self.model = GraphEncoderSchool(self.config).to(self.config.device)
-        self.adaptive_gae = AdaptiveGAE(
+        # Model components
+        self.model = SCHOOL(self.config).to(self.config.device)
+        self.graph_encoder = GCN(
             channels_list=[
                 self.config.school.feat_size,
-                *self.config.school.gae_architecture,
+                *self.config.school.gcn_architecture,
             ],
         ).to(self.config.device)
         self.criterion = SpectralNetLoss()
         self.kl_loss = KLClusteringLoss(alpha=self.kl_alpha)
-        self.gaeloss = GAELoss()
         self.optimizer = torch.optim.Adam(
             self.model.parameters(),
             lr=self.lr,
@@ -185,6 +189,102 @@ class SelfAdjustGraphEncoderTrainer(BaseTrainer):
 
         return Q
 
+    def compute_manifold_distribution(self, H):
+        """
+        Compute attention matrix Q from input matrix H.
+
+        Args:
+            H: torch.Tensor of shape (n, d) where n is number of samples, d is dimension
+
+        Returns:
+            Q: torch.Tensor of shape (n, n) containing attention weights
+        """
+        # Compute pairwise differences: H[i] - H[j] for all i, j
+        # Shape: (n, n, d)
+        diff = H.unsqueeze(1) - H.unsqueeze(0)  # broadcasting
+
+        # Compute squared L2 norms for each pair
+        # Shape: (n, n)
+        l2_squared = torch.sum(diff**2, dim=-1)
+
+        # Compute (1 + ||h_i - h_j||^2)^(-1)
+        weights = 1.0 / (1.0 + l2_squared)
+
+        # Set diagonal to 0 (since we exclude k=i in the sum)
+        weights.fill_diagonal_(0)
+
+        # Normalize: divide each row by sum of that row
+        # Shape: (n, 1)
+        row_sums = weights.sum(dim=1, keepdim=True)
+
+        # Avoid division by zero
+        Q = weights / (row_sums + 1e-10)
+
+        return Q
+
+    def compute_target_distribution(self, X: torch.Tensor, sigma: float):
+        """
+        Compute probability matrix P using Gaussian kernel.
+
+        Args:
+            X: torch.Tensor of shape (n, d) where n is number of samples, d is dimension
+            sigma: float or torch.Tensor, the bandwidth parameter (σ)
+
+        Returns:
+            P: torch.Tensor of shape (n, n) containing probability weights
+        """
+        # Compute pairwise differences: X[i] - X[j] for all i, j
+        # Shape: (n, n, d)
+        diff = X.unsqueeze(1) - X.unsqueeze(0)
+
+        # Compute squared L2 norms for each pair
+        # Shape: (n, n)
+        l2_squared = torch.sum(diff**2, dim=-1)
+
+        # Compute exp(-||x_i - x_j||^2 / (2*sigma^2))
+        weights = torch.exp(-l2_squared / (2 * sigma**2))
+
+        # Set diagonal to 0 (since we exclude k=i in the sum)
+        weights.fill_diagonal_(0)
+
+        # Normalize: divide each row by sum of that row
+        # Shape: (n, 1)
+        row_sums = weights.sum(dim=1, keepdim=True)
+
+        # Avoid division by zero
+        P = weights / (row_sums + 1e-10)
+
+        return P
+
+    def compute_soft_cluster_frequencies(self, Q: torch.Tensor):
+        """
+        Compute soft cluster frequencies from assignment matrix Q.
+
+        Args:
+            Q: torch.Tensor of shape (n, n) where Q[i,j] represents
+            the soft assignment of sample i to cluster j
+
+        Returns:
+            P: torch.Tensor of shape (n, n) containing normalized frequencies
+            f: torch.Tensor of shape (n,) containing cluster frequencies
+        """
+        # Compute cluster frequencies: f_j = sum_i q_ij
+        # Shape: (n,)
+        f = Q.sum(dim=0)
+
+        # Compute q_ij^2 / f_j for all i, j
+        # Shape: (n, n)
+        numerator = (Q**2) / (f.unsqueeze(0) + 1e-10)
+
+        # Compute sum over all j: sum_j (q_ij^2 / f_j)
+        # Shape: (n,)
+        denominator = numerator.sum(dim=1, keepdim=True)
+
+        # Normalize: p_ij = (q_ij^2 / f_j) / sum_j (q_ij^2 / f_j)
+        P = numerator / (denominator + 1e-10)
+
+        return P
+
     def train(
         self,
         features: Optional[torch.Tensor] = None,
@@ -221,7 +321,7 @@ class SelfAdjustGraphEncoderTrainer(BaseTrainer):
             train_loss = 0
             epoch_spectral_loss = 0
             val_loss = 0
-            epoch_node_consistency_loss = 0
+            epoch_manifold_loss = 0
             epoch_cluster_loss = 0
             self.model.train()
             epoch_start_time = time.time()
@@ -231,18 +331,9 @@ class SelfAdjustGraphEncoderTrainer(BaseTrainer):
 
                 A, alpha, beta, idx = self.compute_graph_parameters(X_grad)
 
-                embs_hom, A_updated, Y = self.model(X_grad, X_orth, idx, alpha, beta, A)
-
-                A_construsted = self.adaptive_gae(A_updated, X_grad)
-
-                construstion_loss = self.gaeloss(
-                    A_construsted,
-                    A_updated,
-                    A,
-                    self.adaptive_gae.embedding,
-                    X_grad.shape[0],
+                embs_hom, _, A_updated, Y = self.model(
+                    X_grad, X_orth, idx, alpha, beta, A
                 )
-                embs_graph = self.adaptive_gae.embedding
 
                 cluster_centers = get_cluster_centroids(
                     Y.detach().cpu().numpy(), self.cluster
@@ -265,52 +356,25 @@ class SelfAdjustGraphEncoderTrainer(BaseTrainer):
                 )
                 spectral_loss = spectral_loss + self.gamma * entrpoy_loss
 
-                embs_graph = self.embedding(embs_graph)
-                embs_hom = self.embedding(embs_hom)
+                # Compute manifold distribution and target distribution
+                embs_graph = self.graph_encoder(
+                    x=X_grad, adj_matrix=affinity_to_adjacency(A).to(self.config.device)
+                )
 
-                #######################################################################
-                # The first term in Eq. (15): invariance loss
-                inter_c = embs_hom.T @ embs_graph.detach()
-                inter_c = F.normalize(inter_c, p=2, dim=1)
-                loss_inv = -torch.diagonal(inter_c).sum()
+                manifold_distribution = self.compute_manifold_distribution(embs_hom)
+                target_distribution = self.compute_target_distribution(
+                    embs_graph, sigma=self.sigma
+                )
+                manifold_loss = F.kl_div(manifold_distribution, target_distribution)
 
-                # The second term in Eq. (15): uniformity loss
-                # intra_c = (embs_hom).T @ (embs_hom).contiguous()
-                # intra_c = torch.exp(F.normalize(intra_c, p=2, dim=1)).sum()
-                # loss_uni = torch.log(intra_c).mean()
-
-                # intra_c_2 = (embs_graph).T @ (embs_graph).contiguous()
-                # intra_c_2 = torch.exp(F.normalize(intra_c_2, p=2, dim=1)).sum()
-                # loss_uni += torch.log(intra_c_2).mean()
-                intra_c = (embs_hom).T @ (embs_hom).contiguous() + (embs_graph).T @ (
-                    embs_graph
-                ).contiguous()
-                intra_c = torch.exp(F.normalize(intra_c, p=2, dim=1)).sum()
-                loss_uni = torch.log(intra_c)
-                loss_consistency = loss_inv + self.mu * loss_uni
-
-                # The second term in Eq. (13): cluster-level loss
-                Y_hat = torch.argmax(Q, dim=1)
-                avg_pooling_cluster_center = torch.stack(
-                    [
-                        torch.mean(embs_hom[Y_hat == i], dim=0)
-                        for i in range(self.cluster)
-                    ]
-                )  # Shape: (num_clusters, embedding_dim)
-                # Gather positive cluster centers
-                # positive = avg_pooling_cluster_center[Y_hat]
-                # # The first term in Eq. (11)
-                # inter_c = positive.T @ embs_graph
-                # inter_c = F.normalize(inter_c, p=2, dim=1)
-                # loss_spe_inv = -torch.diagonal(inter_c).sum()
-
-                loss_spe_inv = self.kl_loss(embs_graph, avg_pooling_cluster_center)
+                # Self supervised cluster loss
+                cluster_frequencies = self.compute_soft_cluster_frequencies(Q)
+                cluster_loss = F.kl_div(Q, cluster_frequencies)
 
                 loss = (
                     spectral_loss
-                    + self.mu * loss_consistency
-                    + self.delta * (loss_spe_inv)
-                    + self.theta * construstion_loss
+                    + self.mu * manifold_loss
+                    + self.delta * (cluster_loss)
                 )
 
                 # Backward pass
@@ -323,15 +387,15 @@ class SelfAdjustGraphEncoderTrainer(BaseTrainer):
 
                 train_loss += loss.item()
                 epoch_spectral_loss += spectral_loss.item()
-                epoch_node_consistency_loss += loss_consistency.item()
-                epoch_cluster_loss += loss_spe_inv.item()
+                epoch_manifold_loss += manifold_loss.item()
+                epoch_cluster_loss += cluster_loss.item()
                 # Update progress bar with current metrics
                 pbar.set_postfix(
                     {
                         "loss": f"{loss.item():.4f}",
                         "spec_loss": f"{spectral_loss.item():.4f}",
-                        "loss_consistency": f"{loss_consistency.item():.4f}",
-                        "loss_spe_inv": f"{loss_spe_inv.item():.4f}",
+                        "manifold_loss": f"{manifold_loss.item():.4f}",
+                        "cluster_loss": f"{cluster_loss.item():.4f}",
                     }
                 )
 
@@ -359,15 +423,75 @@ class SelfAdjustGraphEncoderTrainer(BaseTrainer):
                     f"Loss: {train_loss:.4f} "
                     f"Val Loss: {val_loss:.4f} "
                     f"Spectral Loss: {epoch_spectral_loss:.4f} "
-                    f"Node Consistency Loss: {epoch_node_consistency_loss:.4f} "
+                    f"Manifold Loss: {epoch_manifold_loss:.4f} "
                     f"Cluster Loss: {epoch_cluster_loss:.4f} "
                     f"Time: {epoch_time:.2f}s"
                 )
 
+            # if train_loss < best_train_loss:
+            #     best_train_loss = train_loss
+            #     os.makedirs(
+            #         os.path.join(
+            #             self.weight_path,
+            #             "self_adjust_graph_with_soft_assignment",
+            #             self.config.dataset.dataset,
+            #         ),
+            #         exist_ok=True,
+            #     )
+            #     torch.save(
+            #         {
+            #             "epoch": epoch,
+            #             "model_state_dict": self.model.state_dict(),
+            #             "optimizer_state_dict": self.optimizer.state_dict(),
+            #             "train_loss": train_loss,
+            #             "val_loss": val_loss,
+            #             "orthonorm_weights": self.model.spectral_net.orthonorm_weights,
+            #         },
+            #         os.path.join(
+            #             self.weight_path,
+            #             "self_adjust_graph_with_soft_assignment",
+            #             self.config.dataset.dataset,
+            #             "best_model.pt",
+            #         ),
+            #     )
+            #     self.logger.info(
+            #         f"Saved new best model with train loss: {train_loss:.4f}"
+            #     )
+
+            # if epoch_spectral_loss < best_spectral_loss:
+            #     best_spectral_loss = epoch_spectral_loss
+            #     os.makedirs(
+            #         os.path.join(
+            #             self.weight_path,
+            #             "self_adjust_graph_with_soft_assignment",
+            #             self.config.dataset.dataset,
+            #         ),
+            #         exist_ok=True,
+            #     )
+            #     torch.save(
+            #         {
+            #             "epoch": epoch,
+            #             "model_state_dict": self.model.state_dict(),
+            #             "optimizer_state_dict": self.optimizer.state_dict(),
+            #             "train_loss": train_loss,
+            #             "val_loss": val_loss,
+            #             "orthonorm_weights": self.model.spectral_net.orthonorm_weights,
+            #         },
+            #         os.path.join(
+            #             self.weight_path,
+            #             "self_adjust_graph_with_soft_assignment",
+            #             self.config.dataset.dataset,
+            #             "best_spectral_loss.pt",
+            #         ),
+            #     )
+            #     self.logger.info(
+            #         f"Saved new best model with spectral loss: {epoch_spectral_loss:.4f}"
+            #     )
+
             result = {
                 "train_loss": train_loss,
                 "spectral_loss": epoch_spectral_loss,
-                "node_consistency_loss": epoch_node_consistency_loss,
+                "manifold_loss": epoch_manifold_loss,
                 "cluster_loss": epoch_cluster_loss,
                 "val_loss": val_loss,
             }
@@ -410,7 +534,7 @@ class SelfAdjustGraphEncoderTrainer(BaseTrainer):
 
         with torch.no_grad():
             self.embeddings_, _, _ = self.model.spectral_net(
-                X, should_update_orth_weights=True
+                X, should_update_orth_weights=False
             )
             self.embeddings_ = self.embeddings_.detach().cpu().numpy()
 
@@ -419,6 +543,9 @@ class SelfAdjustGraphEncoderTrainer(BaseTrainer):
         cluster_centers = torch.tensor(cluster_centers, device=X.device)
         Y = torch.tensor(self.embeddings_, device=X.device)
         Q = self.compute_soft_assignments(Y, cluster_centers)
+        cluster_assignments = torch.argmax(Q, dim=1).detach().cpu().numpy()
+
+        return cluster_assignments
         cluster_assignments = torch.argmax(Q, dim=1).detach().cpu().numpy()
 
         return cluster_assignments

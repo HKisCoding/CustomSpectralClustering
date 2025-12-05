@@ -75,7 +75,15 @@ class SCHOOL(nn.Module):
 
         embs_hom = torch.mm(A, semantic_H)
 
-        embs_graph = self.graph_encoder(x=x, adj_matrix=A.to(device))
+        embs_graph = self.graph_encoder(
+            x=x, adj_matrix=affinity_to_adjacency(A).to(device)
+        )
+        # init_embs_graph = self.graph_encoder(x=x, adj_matrix=self.init_graph.to(device))
+
+        # stack_matrices = torch.stack([embs_graph, init_embs_graph])  # Shape: [N, H, W]
+
+        # # Calculate element-wise mean across all matrices
+        # unified_embs_graph = torch.mean(stack_matrices, dim=0)  # Shape: [H, W]
 
         return embs_hom, embs_graph, A, Y
 

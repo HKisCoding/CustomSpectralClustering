@@ -456,7 +456,7 @@ class SelfAdjustGraphTrainer(BaseTrainer):
 
         with torch.no_grad():
             self.embeddings_, _, _ = self.model.spectral_net(
-                X, should_update_orth_weights=True
+                X, should_update_orth_weights=False
             )
             self.embeddings_ = self.embeddings_.detach().cpu().numpy()
 
