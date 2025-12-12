@@ -1,5 +1,6 @@
 import os
 
+import pandas as pd
 import torch
 from torch.utils.data import DataLoader, Dataset
 
@@ -14,7 +15,7 @@ from utils.Config import AEConvConfig, Config
 # Configuration for SelfAdjustGraphTrainer
 config_dict = {
     "training": {"lr": 0.001, "num_epoch": 100},
-    "dataset": {"dataset": "coil-20", "batch_size": 256},
+    "dataset": {"dataset": "mnist", "batch_size": 256},
     "dsc": {
         "hidden_units": 10,
         "batch_size": 512,
@@ -52,33 +53,27 @@ def train_dsc():
     features = torch.cat(features, dim=0)
     labels = torch.cat(labels, dim=0)
 
-    trainer.model = model_conv([batch_size, 3, 28, 28], config, load_weights=False)
-
-    n_cluster = len(torch.unique(labels))
-
     val_results = []
-    losses = []
-    for i in range(1):
+    for i in range(5):
+        trainer.model = model_conv([batch_size, 3, 28, 28], config, load_weights=False)
+
+        n_cluster = len(torch.unique(labels))
         if not os.path.exists(trainer.ae_weight_path):
             trainer.train_reconstruction(dataloader)
         trainer.load_reconstruction_weights()
 
         for feat, label in dataloader:
-            loss = trainer.train(feat, n_cluster)
-        losses.append(loss)
+            _ = trainer.train(feat, n_cluster)
 
-    val_result = trainer.evaluate(features, labels)
-    val_results.append(val_result)
+        val_result = trainer.evaluate(features, labels.cpu().numpy())
+        val_results.append(val_result)
 
-    print(losses)
-    print(val_results)
+        print(val_results)
 
-    # output_path = f"output\\dsc\\{config.dataset.dataset}"
-    # os.makedirs(output_path, exist_ok=True)
-    # loss_df = pd.DataFrame(losses)
-    # loss_df.to_csv(f"{output_path}\\loss.csv")
-    # val_df = pd.DataFrame(val_results)
-    # val_df.to_csv(f"{output_path}\\val.csv")
+        output_path = f"output\\dsc\\{config.dataset.dataset}"
+        os.makedirs(output_path, exist_ok=True)
+        val_df = pd.DataFrame(val_results)
+        val_df.to_csv(f"{output_path}\\val.csv")
 
 
 if __name__ == "__main__":

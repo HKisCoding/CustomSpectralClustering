@@ -350,7 +350,7 @@ class DSC_trainer(object):
                 y_pred = self.model(x_batch)
                 if isinstance(y_pred, tuple):
                     y_pred = y_pred[0]  # Take embeddings if multiple outputs
-                loss = torch.nn.functional.mse_loss(y_batch, y_pred)
+                loss = MSELoss()(y_batch, y_pred, self.hidden_units)
                 loss.backward()
                 optimizer.step()
                 epoch_loss += loss.item()
@@ -407,8 +407,8 @@ class DSC_trainer(object):
         x = x.to(self.device)
 
         with torch.no_grad():
-            H = self.model(x).cpu().numpy()
-
+            H, _, _ = self.model(x)
+            H = H.cpu().numpy()
         cluster_assignments = get_clusters_by_kmeans(H, n_clusters)
 
         result = run_evaluate_with_labels(

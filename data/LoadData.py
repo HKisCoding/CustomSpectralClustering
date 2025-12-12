@@ -76,8 +76,8 @@ def load_dataset(
             trainset and validset will contain transformed images and labels
     """
     try:
-        img_dir = f"dataset\\{dataset_name}"
-        annotation = f"dataset\\{dataset_name}.csv"
+        img_dir = f"dataset/{dataset_name}"
+        annotation = f"dataset/{dataset_name}.csv"
 
         # Create full dataset
         dataset = ImageDataset(image_dir=img_dir, annotation=annotation, device=device)

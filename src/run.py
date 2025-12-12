@@ -37,7 +37,7 @@ config_dict = {
         "gcn_architecture": [1024, 512],
         "spectral_architecture": [1024, 1024, 512],
     },
-    "dataset": {"dataset": "Caltech_101", "batch_size": 2000},
+    "dataset": {"dataset": "coil-20", "batch_size": 2000},
     "backbone": {
         "name": "resnet18",
         "pretrained": True,
@@ -323,7 +323,7 @@ def run_self_adjust_graph_manifold():
 
 if __name__ == "__main__":
     # run_spectral_net()
-    run_self_adjust_graph_net()
-    # run_self_adjust_graph_manifold()
+    # run_self_adjust_graph_net()
+    run_self_adjust_graph_manifold()
     # run_validation()
     # run_training_auto_encoder()

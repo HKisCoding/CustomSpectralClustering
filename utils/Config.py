@@ -32,15 +32,6 @@ class DatasetConfig(BaseConfig):
                 "features": "dataset/embedding/resnet/MSRC-v2_Feature.pt",
                 "labels": "dataset/embedding/resnet/MSRC-v2_Label.pt",
             },
-            "colon_cancer": {
-                "path": "dataset/colon_cancer/colon_cancer.csv",
-            },
-            "leumika": {
-                "path": "dataset/Leukemia/leukemia.csv",
-            },
-            "prokaryotic": {
-                "path": "dataset/prokaryotic.mat",
-            },
             "coil-20": {
                 "features": "dataset/embedding/resnet/coil-20_Feature.pt",
                 "labels": "dataset/embedding/resnet/coil-20_Label.pt",
@@ -120,6 +111,7 @@ class SelfAdjustGraphConfig(BaseConfig):
     eta: float = 0.1
     theta: float = 0.1
     cluster: int = 10
+    sigma: float = 1.0
     auxillary_loss_kind: str = "entropy"
     auxillary_loss_alpha: float = 1.0
 
