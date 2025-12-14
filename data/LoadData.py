@@ -76,58 +76,34 @@ def load_dataset(
             trainset and validset will contain transformed images and labels
     """
     try:
-        img_dir = f"dataset/{dataset_name}"
-        annotation = f"dataset/{dataset_name}.csv"
+        if dataset_name != "mnist":
+            img_dir = f"dataset/{dataset_name}"
+            annotation = f"dataset/{dataset_name}.csv"
 
-        # Create full dataset
-        dataset = ImageDataset(image_dir=img_dir, annotation=annotation, device=device)
+            # Create full dataset
+            dataset = ImageDataset(
+                image_dir=img_dir, annotation=annotation, device=device
+            )
 
-        # Split into train and validation sets
-        if split_dataset:
-            trainset_len = int(len(dataset) * train_size)
-            validset_len = len(dataset) - trainset_len
-            trainset, validset = random_split(dataset, [trainset_len, validset_len])
-            return trainset, validset
+            # Split into train and validation sets
+            if split_dataset:
+                trainset_len = int(len(dataset) * train_size)
+                validset_len = len(dataset) - trainset_len
+                trainset, validset = random_split(dataset, [trainset_len, validset_len])
+                return trainset, validset
+            else:
+                return dataset
         else:
+            from data.CreateMNIST import load_mnist
+
+            x_train, y_train, x_test, y_test = load_mnist()
+            X_origin = torch.cat([x_train, x_test])
+            y_origin = torch.cat([y_train, y_test])
+            dataset = torch.utils.data.TensorDataset(X_origin, y_origin)
+
             return dataset
-    except:
-        raise ValueError(f"Dataset '{dataset_name}' is not supported")
-
-
-def load_feature_from_scratch(dataset_name: str, model: Sequential, device: str):
-    trainset, validset = load_dataset(dataset_name, device=device)
-
-    # Extract features from datasets
-    train_loader = DataLoader(trainset, batch_size=32, shuffle=False)
-    valid_loader = DataLoader(validset, batch_size=32, shuffle=False)
-
-    # Collect all features and labels
-    train_features = []
-    train_labels = []
-    valid_features = []
-    valid_labels = []
-
-    with torch.no_grad():
-        for imgs, labels in train_loader:
-            features = model(imgs)
-            train_features.append(features.squeeze())
-            train_labels.append(labels)
-        for imgs, labels in valid_loader:
-            features = model(imgs)
-            valid_features.append(features.squeeze())
-            valid_labels.append(labels)
-
-    train_features = torch.cat(train_features, dim=0)
-    train_labels = torch.cat(train_labels, dim=0)
-    valid_features = torch.cat(valid_features, dim=0)
-    valid_labels = torch.cat(valid_labels, dim=0)
-
-    # Combine training and validation features
-    features = torch.cat([train_features, valid_features], dim=0)
-    labels = torch.cat([train_labels, valid_labels], dim=0)
-
-    torch.save(features, f"dataset/embedding/resnet/{dataset_name}_Feature.pt")
-    torch.save(labels, f"dataset/embedding/resnet/{dataset_name}_Label.pt")
+    except Exception as e:
+        raise ValueError(f"Dataset '{dataset_name}' is not supported: {e}")
 
 
 def create_features_object(dataset_name, backbone_name, device):

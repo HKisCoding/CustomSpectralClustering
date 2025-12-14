@@ -15,7 +15,7 @@ from utils.Config import AEConvConfig, Config
 # Configuration for SelfAdjustGraphTrainer
 config_dict = {
     "training": {"lr": 0.001, "num_epoch": 100},
-    "dataset": {"dataset": "mnist", "batch_size": 256},
+    "dataset": {"dataset": "MSRC-v2", "batch_size": 256},
     "dsc": {
         "hidden_units": 10,
         "batch_size": 512,
